@@ -25,6 +25,10 @@ public class Tracker extends Thread{
         tracker.start();
     }
 
+    public static void printMessage(String message){
+        System.out.println("[Tracker]> " + message);
+    }
+
     public void run(){
 
         try {

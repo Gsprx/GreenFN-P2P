@@ -1,7 +1,9 @@
+import javax.sound.midi.Track;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -80,12 +82,14 @@ public class TrackerThread extends Thread{
                 //register failed
                 out.writeInt(0);
                 out.flush();
+                Tracker.printMessage("User " + username + " attempted to register and failed!");
                 return;
             }
             //user does not exist
             String password = (String) in.readObject();
             registeredUsers.putIfAbsent(username, password);
             //register successful
+            Tracker.printMessage("User " + username + " successfully registered!");
             out.writeInt(1);
             out.flush();
 
@@ -119,12 +123,14 @@ public class TrackerThread extends Thread{
                 }
 
                 //login successful, send session id back to peer.
+                Tracker.printMessage("User " + username + " logged into the system successfully, using ID: " + sessionID);
                 out.writeInt(1);
                 out.writeInt(sessionID);
                 out.flush();
                 return;
             }
             //login not successful
+            Tracker.printMessage("User " + username + " attempted login failed!");
             out.writeInt(0);
             out.flush();
 
@@ -140,13 +146,16 @@ public class TrackerThread extends Thread{
         try {
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             int tokenID = in.readInt();
-            if (activeUsers.remove(tokenID) != null){
+            String[] loggedOutUserDetails = activeUsers.remove(tokenID);
+            if (loggedOutUserDetails != null){
                 //removed from active users
+                Tracker.printMessage("User " + Arrays.toString(loggedOutUserDetails) + " with ID " + tokenID + " logged out successfully!");
                 out.write(1);
                 out.flush();
             }
             else {
                 //token id does not exist (for some green fn reason)
+                Tracker.printMessage("User with ID " + tokenID + " failed to log out!");
                 out.write(0);
                 out.flush();
             }
