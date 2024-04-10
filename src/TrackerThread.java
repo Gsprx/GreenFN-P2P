@@ -1,8 +1,6 @@
 import java.net.Socket;
 
 public class TrackerThread extends Thread{
-
-
     @Override
     public void run() {
         super.run();
