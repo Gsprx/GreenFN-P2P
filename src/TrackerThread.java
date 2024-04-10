@@ -29,26 +29,30 @@ public class TrackerThread extends Thread{
             super.run();
             in = new ObjectInputStream(connection.getInputStream());
 
-            //decide what to do based on the code sent
-            int code = in.readInt();
+            outer:
+            while (true) {
+                //decide what to do based on the code sent
+                int code = in.readInt();
 
-            switch (code) {
-                case 1:{
-                    registerUser();
-                    break;
-                }
-                case 2:{
-                    loginUser();
-                    break;
-                }
-                case 3:{
-                    logoutUser();
-                }
+                switch (code) {
+                    case 1: {
+                        registerUser();
+                        break;
+                    }
+                    case 2: {
+                        loginUser();
+                        break;
+                    }
+                    case 3: {
+                        logoutUser();
+                        break outer; //terminate the thread
+                    }
 
-            }
+                }//switch
 
+            }//while
 
-        }
+        }//try
         catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -134,8 +138,22 @@ public class TrackerThread extends Thread{
     //expected input is int
     private void logoutUser(){
         try {
+            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             int tokenID = in.readInt();
+            if (activeUsers.remove(tokenID) != null){
+                //removed from active users
+                out.write(1);
+                out.flush();
+            }
+            else {
+                //token id does not exist (for some green fn reason)
+                out.write(0);
+                out.flush();
+            }
 
+            //close all things related to the socket
+            in.close();
+            connection.close();
 
         } catch (IOException e) {
             throw new RuntimeException(e);
