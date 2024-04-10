@@ -97,6 +97,7 @@ public class TrackerThread extends Thread{
         try {
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             String username = (String) in.readObject();
+            String password = (String) in.readObject();
             if(registeredUsers.containsKey(username)){
                 //user already exists
                 //register failed
@@ -106,7 +107,6 @@ public class TrackerThread extends Thread{
                 return;
             }
             //user does not exist
-            String password = (String) in.readObject();
             registeredUsers.putIfAbsent(username, password);
             //register successful
             Tracker.printMessage("User " + username + " successfully registered!");
@@ -138,7 +138,7 @@ public class TrackerThread extends Thread{
 
                 //send session id back to peer.
                 Tracker.printMessage("User " + username + " logged into the system successfully, using ID: " + tokenID);
-                out.writeInt(1);
+//                out.writeInt(1);
                 out.writeInt(tokenID);
                 out.flush();
                 return;

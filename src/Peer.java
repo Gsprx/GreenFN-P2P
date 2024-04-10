@@ -6,6 +6,8 @@ import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class Peer {
     /**
@@ -77,7 +79,32 @@ public class Peer {
           Όταν εσυ θα κανείς τα streams, βάλε αυτή η μεταβλητή να παίρνει την τιμή της απο τον tracker
           (αν απέτυχε 0, αν πέτυχε 1)
          */
-        int response = 1;
+        int response;
+        try {
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            //Send register code
+            out.writeInt(1);
+            out.flush();
+            //Send username
+            out.writeObject(username);
+            out.flush();
+            //Send encrypted password
+            String encryptedPassword;
+            try {
+                encryptedPassword = this.hashString(password);
+            }catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException(e);
+            }
+            out.writeObject(encryptedPassword);
+            out.flush();
+            //Read 1(success), or 0(fail)
+            response = in.readInt();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+//        int response = 1;
         if (response == 1) System.out.println("[+] User registered successfully");
         else System.out.println("[-] User already exists");
     }
@@ -113,7 +140,32 @@ public class Peer {
           Όταν εσυ θα κανείς τα streams, βάλε αυτή η μεταβλητή να παίρνει την τιμή της απο τον tracker
           (αν απέτυχε 0, αν πέτυχε το token_id) green fn
          */
-        int response = 1;
+        int response;
+        try {
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            //Send register code
+            out.writeInt(2);
+            out.flush();
+            //Send username
+            out.writeObject(username);
+            out.flush();
+            //Send encrypted password
+            String encryptedPassword;
+            try {
+                encryptedPassword = this.hashString(password);
+            }catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException(e);
+            }
+            out.writeObject(encryptedPassword);
+            out.flush();
+            //Read tokenID(success), or 0(fail)
+            response = in.readInt();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+//        int response = 1;
         if (response != 0) runLoggedIn(response);
         else System.out.println("[-] Wrong credentials");
     }
@@ -170,15 +222,90 @@ public class Peer {
      */
     private void logout(int token) {
         // TODO: Send logout request to tracker
+        int response;
+        try {
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            //Send register code
+            out.writeInt(3);
+            out.flush();
+            //Send tokenID
+            out.writeInt(token);
+            out.flush();
+            response = in.readInt();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         // wait for response (temp response string below)
-        String response = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.";
-        System.out.println(response);
+        String Message;
+        if(response==1){
+            Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.";
+        }else {
+            Message = "[+] You donkey kong can't even log out properly.";
+        }
+        System.out.println(Message);
+    }
+    /**
+     * Send Tracker Information
+     * This method is called after user log in to update tracker about the peer's information.
+     * Send tokenID, files(Name because its unique), peerIP, peerPort to tracker so the tracker can store them.
+     */
+    //TODO where to we store the files(Name because its unique), peerIP, peerPort, so we can send them to the tracker?
+    private void sendTrackerInformation(int token){
+        try {
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            //Send register code
+            out.writeInt(4);
+            out.flush();
+            //Send tokenID
+            out.writeInt(token);
+            out.flush();
+            //Send files
+            out.writeObject(token);
+            out.flush();
+            //Send peerIP
+            out.writeObject(token);
+            out.flush();
+            //Send peerPort
+            out.writeObject(token);
+            out.flush();
+
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    /**
+     * Hashing any String.
+     * Use the password as input, so you can send the hashed string to tracker.
+     * Enhances security.
+     */
+    private String hashString(String input) throws NoSuchAlgorithmException{
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes());
+
+            // Convert byte array to a hexadecimal string
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
     }
 
     public static void main(String[] args) {
         Peer peer = new Peer();
         peer.runPeer();
-
+        /*TODO
+        Open one thread to Register/ Login
+        Then We Open the server for this peer to a new thread
+        * */
         try {
             ServerSocket server = new ServerSocket(6000);
             while(true){
