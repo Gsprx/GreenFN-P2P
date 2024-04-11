@@ -301,7 +301,9 @@ public class Peer {
 
     public static void main(String[] args) {
         Peer peer = new Peer();
-        peer.runPeer();
+        Thread consolePeer = new Thread(()->peer.runPeer());
+        consolePeer.start();
+//        peer.runPeer();
         /*TODO
         Open one thread to Register/ Login
         Then We Open the server for this peer to a new thread
