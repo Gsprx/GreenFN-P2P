@@ -1,15 +1,13 @@
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Tracker extends Thread{
 
     //Registered Users consists of (Username,Password)
-    private ConcurrentHashMap<String, String> registeredUsers;
+    private static ConcurrentHashMap<String, String> registeredUsers;
 
     //Active users consists of (tokenID, [IP, port, username])
     private ConcurrentHashMap<Integer,String[]> activeUsers;
@@ -17,13 +15,19 @@ public class Tracker extends Thread{
     //User count statistics consists of (Username, [countDownload,countFail])
     private ConcurrentHashMap<String, int[]> userCountStatistics;
 
-    //shared folder catalog, consists of (FileName, list of tokens who own that file)
-    private ConcurrentHashMap<String, HashSet<Integer>> sharedDirectory;
+    //Allowed files contains only the files in fileDownloadList.txt and the tokens of their owners
+    private ConcurrentHashMap<String, HashSet<Integer>> allowedFiles;
+
+    //Hashset will all available files
+    private HashSet<String> allFiles;
 
 
     public Tracker(){
         registeredUsers = new ConcurrentHashMap<>();
         activeUsers = new ConcurrentHashMap<>();
+        userCountStatistics = new ConcurrentHashMap<>();
+        allowedFiles = new ConcurrentHashMap<>();
+        allFiles = new HashSet<>();
     }
 
     public static void main(String[] args) {
@@ -44,7 +48,7 @@ public class Tracker extends Thread{
             ServerSocket server = new ServerSocket(5000);
             while(true){
                 Socket inConnection = server.accept();
-                Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, sharedDirectory);
+                Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, allowedFiles, allFiles);
                 t.start();
             }
 
