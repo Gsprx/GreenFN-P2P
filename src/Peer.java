@@ -13,6 +13,13 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class Peer {
+    String ip;
+    int port;
+    public Peer(String ip, int port) {
+        this.ip = ip;
+        this.port = port;
+    }
+
     /**
      * Run peer.
      * This method is called when we want to run a peer to show and manage options.
@@ -86,13 +93,10 @@ public class Peer {
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             //Send register code
-            out.writeInt(1);
-            out.flush();
+            out.writeInt(Function.REGISTER.getEncoded());
             //Send username
             out.writeObject(username);
-            out.flush();
             //Send encrypted password
             String encryptedPassword;
             try {
@@ -103,11 +107,12 @@ public class Peer {
             out.writeObject(encryptedPassword);
             out.flush();
             //Read 1(success), or 0(fail)
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             response = in.readInt();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-//        int response = 1;
+
         if (response == 1) System.out.println("[+] User registered successfully");
         else System.out.println("[-] User already exists");
     }
@@ -147,9 +152,8 @@ public class Peer {
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             //Send register code
-            out.writeInt(2);
+            out.writeInt(Function.LOGIN.getEncoded());
             out.flush();
             //Send username
             out.writeObject(username);
@@ -164,12 +168,31 @@ public class Peer {
             out.writeObject(encryptedPassword);
             out.flush();
             //Read tokenID(success), or 0(fail)
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             response = in.readInt();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-//        int response = 1;
-        if (response != 0) runLoggedIn(response);
+
+        if (response != 0) {
+            // start the thread for the user
+            Thread runPeer = new Thread(()->runLoggedIn(response));
+            runPeer.start();
+            // start the thread for the server
+            Thread runServer = new Thread(()-> {
+                try {
+                    ServerSocket server = new ServerSocket(this.port);
+                    while(true){
+                        Socket inConnection = server.accept();
+                        Thread t = new PeerThread(inConnection);
+                        t.start();
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            runServer.start();
+        }
         else System.out.println("[-] Wrong credentials");
     }
 
@@ -203,7 +226,7 @@ public class Peer {
                     break;
                 // option 3: check active
                 case "3":
-                    // TODO: Check Active
+                    checkActive();
                     break;
                 // option 4: simple download
                 case "4":
@@ -237,7 +260,7 @@ public class Peer {
             Scanner inp = new Scanner(System.in);
             ip = inp.nextLine();
             // check if it is an ip address
-            is_ipv4 = TypeChecking.isIPv4(ip);
+            is_ipv4 = TypeChecking.isIPv4(ip) || ip.equals("localhost");
         }
 
         // read port
@@ -361,22 +384,7 @@ public class Peer {
     }
 
     public static void main(String[] args) {
-        Peer peer = new Peer();
-        Thread consolePeer = new Thread(()->peer.runPeer());
-        consolePeer.start();
-        /*TODO
-        Open one thread to Register/ Login
-        Then We Open the server for this peer to a new thread
-        * */
-        try {
-            ServerSocket server = new ServerSocket(6000);
-            while(true){
-                Socket inConnection = server.accept();
-                Thread t = new PeerThread(inConnection);
-                t.start();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        Peer peer = new Peer(args[0], Integer.parseInt(args[1]));
+        peer.runPeer();
     }
 }

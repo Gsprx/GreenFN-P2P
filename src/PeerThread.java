@@ -10,14 +10,16 @@ public class PeerThread extends Thread{
     public PeerThread(Socket connection){
         //handle connection
         this.connection = connection;
+        try {
+            in = new ObjectInputStream(connection.getInputStream());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void run() {
         try {
-            super.run();
-            in = new ObjectInputStream(connection.getInputStream());
-
             // decide what to do based on the code sent
             int func = in.readInt();
             switch (func) {
