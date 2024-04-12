@@ -1,3 +1,5 @@
+import misc.Config;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -45,7 +47,7 @@ public class Tracker extends Thread{
      */
     public void run(){
         try {
-            ServerSocket server = new ServerSocket(5000);
+            ServerSocket server = new ServerSocket(Config.TRACKER_PORT);
             while(true){
                 Socket inConnection = server.accept();
                 Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, allowedFiles, allFiles);

@@ -26,6 +26,12 @@ public class TrackerThread extends Thread{
         this.userCountStatistics = userCountStatistics;
         this.allowedFiles = allowedFiles;
         this.allFiles = allFiles;
+
+        try {
+            in = new ObjectInputStream(connection.getInputStream());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
@@ -36,9 +42,6 @@ public class TrackerThread extends Thread{
     @Override
     public void run() {
         try {
-            super.run();
-            in = new ObjectInputStream(connection.getInputStream());
-
             //decide what to do based on the code sent
             int code = in.readInt();
 
