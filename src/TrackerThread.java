@@ -1,8 +1,8 @@
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.time.temporal.TemporalAccessor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -61,6 +61,15 @@ public class TrackerThread extends Thread{
                 }
                 case 5: {
                     peerNotify();
+                    break;
+                }
+                case 6:{
+                    replyList();
+                    break;
+                }
+                case 7:{
+                    replyDetails();
+                    break;
                 }
 
             }//switch
@@ -69,6 +78,14 @@ public class TrackerThread extends Thread{
             throw new RuntimeException(e);
         }
     }
+
+    /*
+    ======================================
+
+              HELPER FUNCTIONS
+
+    ======================================
+     */
 
 
     private int getSessionID() {
@@ -81,6 +98,49 @@ public class TrackerThread extends Thread{
             sessionID = rand.nextInt(1,10000);
         }
         return sessionID;
+    }
+
+    private boolean checkActive(int tokenID){
+        //check if token exists in active users
+        if(!activeUsers.containsKey(tokenID)){
+            //token does not exist, peer cannot be active
+            return false;
+        }
+        //token exists check active status
+        String[] info = activeUsers.get(tokenID);
+
+        String ip = info[0];
+        int port = Integer.parseInt(info[1]);
+
+        try{
+            Socket socket = new Socket(ip,port);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+
+            //write checkAlive code
+            out.writeInt(10);
+            out.flush();
+
+            //await response of 1 for OK
+            int reply = in.readInt();
+
+            return reply == 1;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    //used to remove a tokenID from the system
+    private void removeTokenID(int tokenID){
+
+        //remove the token from active users log
+        activeUsers.remove(tokenID);
+
+        //remove the token from all files it exists as an owner in
+        for(HashSet<Integer> fileOwners : allowedFiles.values()){
+            fileOwners.remove(tokenID);
+        }
+        Tracker.printMessage("Token: " + tokenID + " was removed from the system due to inactivity!");
     }
 
 
@@ -274,6 +334,7 @@ public class TrackerThread extends Thread{
 
             //increase count download for sender
             userCountStatistics.get(senderUsername)[0]++;
+            Tracker.printMessage("User with token : " + tokenID + " notified the tracker of a successful download from user: " + senderUsername + " for the file: " + filename);
 
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -281,20 +342,132 @@ public class TrackerThread extends Thread{
     }
 
     //5 -> code = 0
-    //expected input is String senderUsername
+    //expected input is int token id, String senderUsername
     private void  peerNotifyFail(){
         try{
+            //identify token of recipient
+            int tokenID = in.readInt();
             //identify username of sender
             String senderUsername = (String) in.readObject();
 
             //increase count fail for sender
             userCountStatistics.get(senderUsername)[1]++;
-
+            Tracker.printMessage("User with token: " + tokenID + " notified the tracker of a failed download from user: " + senderUsername);
         }
         catch (IOException | ClassNotFoundException e){
             throw new RuntimeException(e);
         }
     }
 
+    //code = 6
+    //expected input is int token id
+    private void replyList(){
+        try{
+            //identify requester
+            int tokenID = in.readInt();
+
+            //get network info on user to connect the socket to
+            String[] info = activeUsers.get(tokenID);
+            String ip = info[0];
+            String port = info[1];
+
+
+            Socket replySocket = new Socket(ip,Integer.parseInt(port));
+            ArrayList<String> files = new ArrayList<>();
+
+            for(String file : allFiles){
+                files.add(new String(file));
+            }
+
+            //send files to requester
+            ObjectOutputStream out = new ObjectOutputStream(replySocket.getOutputStream());
+            out.writeObject(files);
+            out.flush();
+            Tracker.printMessage("User: " + info[2] + "received a copy of all the file names available in the system");
+
+
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    //code = 7
+    //expected input is int token id, String filename
+    private void replyDetails(){
+        try {
+            //identify requester
+            int tokenID = in.readInt();
+            //get file name
+            String filename = (String) in.readObject();
+
+
+            //get requesters info for reply
+            String[] requesterInfo = activeUsers.get(tokenID);
+            String replyIP = requesterInfo[0];
+            int replyPort = Integer.parseInt(requesterInfo[1]);
+
+            Socket replySocket = new Socket(replyIP, replyPort);
+            ObjectOutputStream out = new ObjectOutputStream(replySocket.getOutputStream());
+
+            //requested file does not exist in the system
+            if(!allowedFiles.containsKey(filename)){
+                //send code for fail (file does not exist)
+                out.writeInt(0);
+                out.flush();
+                Tracker.printMessage("User with token: " + tokenID + " requested a file that does not exist - " + filename);
+                return;
+            }
+
+            //prepare reply lists
+
+            //List with [IP,Port,Username]
+            ArrayList<String[]> fileOwnersInfo = new ArrayList<>();
+            //List with [CountDownload, CountFail]
+            ArrayList<int[]> fileOwnersStatistics = new ArrayList<>();
+
+            //check all owners of requested file
+            HashSet<Integer> fileOwnerIDs = allowedFiles.get(filename);
+            for(int ownerID : fileOwnerIDs){
+                if(checkActive(ownerID)){
+                    //get specific active owners info
+                    String[] activeOwnerInfo = activeUsers.get(ownerID);
+                    String ownerUsername = activeOwnerInfo[2];
+
+                    //add owners info and statistics to reply list
+                    fileOwnersInfo.add(activeOwnerInfo);
+                    fileOwnersStatistics.add(userCountStatistics.get(ownerUsername));
+                }
+                //remove inactive tokens from the system
+                else {
+                    removeTokenID(ownerID);
+                }
+            }
+
+
+            //send result to requester
+            if(fileOwnersInfo.isEmpty() || fileOwnersStatistics.isEmpty()){
+                //send code for fail (no active owners found of requested file)
+                out.writeInt(-1);
+                out.flush();
+            }
+            else{
+                //send code for success
+                out.writeInt(1);
+                out.flush();
+
+                //send file owners info
+                out.writeObject(fileOwnersInfo);
+                out.flush();
+                //send file owners statistics
+                out.writeObject(fileOwnersStatistics);
+                out.flush();
+            }
+
+        } catch (IOException | ClassNotFoundException e) {
+            Tracker.printMessage("Error! " + e.getMessage());
+        }
+
+    }
 
 }
