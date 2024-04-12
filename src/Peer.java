@@ -1,10 +1,13 @@
 import misc.Config;
+import misc.Function;
+import misc.TypeChecking;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.Scanner;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -216,7 +219,63 @@ public class Peer {
     }
 
     /**
-     * User LogOut.
+     * Option 3 | Check Active
+     * Try pinging a certain peer.
+     * If he responds, then he is active.
+     */
+    private void checkActive() {
+        System.out.println("\n|Check Active|");
+
+        String ip = null;
+        int port = 6000;
+
+        // read ip
+        boolean is_ipv4 = false;
+        while (!is_ipv4) {
+            // get a string of the ip address
+            System.out.print("Enter peer ip address: ");
+            Scanner inp = new Scanner(System.in);
+            ip = inp.nextLine();
+            // check if it is an ip address
+            is_ipv4 = TypeChecking.isIPv4(ip);
+        }
+
+        // read port
+        boolean is_int = false;
+        while (!is_int) {
+            // get a string of the port
+            System.out.print("Enter peer port: ");
+            Scanner inp = new Scanner(System.in);
+            String ans = inp.nextLine();
+            // check if answer is int
+            is_int = TypeChecking.isInteger(ans);
+            if (is_int) port = Integer.parseInt(ans);
+        }
+
+        try {
+            Socket socket = new Socket(ip, port);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+
+            // write to peer
+            out.writeInt(Function.CHECK_ACTIVE.getEncoded());
+            out.flush();
+            // wait for response
+            String response = (String) in.readObject();
+            System.out.println(response);
+
+            out.close();
+            in.close();
+            socket.close();
+        } catch (UnknownHostException e) {
+            System.out.println("[-] Host with ip: [" + ip + "] at port: [" + port + "] is not found.\n");
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Option 5 | User LogOut
      * This method is called if the user chose to log out.
      * Send request to tracker so the tracker can remove token_id of user
      */
@@ -246,6 +305,7 @@ public class Peer {
         }
         System.out.println(Message);
     }
+
     /**
      * Send Tracker Information
      * This method is called after user log in to update tracker about the peer's information.
@@ -278,6 +338,7 @@ public class Peer {
             throw new RuntimeException(e);
         }
     }
+
     /**
      * Hashing any String.
      * Use the password as input, so you can send the hashed string to tracker.
@@ -303,7 +364,6 @@ public class Peer {
         Peer peer = new Peer();
         Thread consolePeer = new Thread(()->peer.runPeer());
         consolePeer.start();
-//        peer.runPeer();
         /*TODO
         Open one thread to Register/ Login
         Then We Open the server for this peer to a new thread
@@ -315,7 +375,6 @@ public class Peer {
                 Thread t = new PeerThread(inConnection);
                 t.start();
             }
-
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

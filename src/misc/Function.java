@@ -1,6 +1,6 @@
 package misc;
 
-public enum TrackerFunction {
+public enum Function {
     REGISTER {
         @Override
         public int getEncoded() {
@@ -12,6 +12,13 @@ public enum TrackerFunction {
         @Override
         public int getEncoded() {
             return 2;
+        }
+    },
+
+    CHECK_ACTIVE {
+        @Override
+        public int getEncoded() {
+            return 7;
         }
     };
 
