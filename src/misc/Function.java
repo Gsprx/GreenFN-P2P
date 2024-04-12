@@ -15,10 +15,45 @@ public enum Function {
         }
     },
 
-    CHECK_ACTIVE {
+    LOGOUT {
+        @Override
+        public int getEncoded() {
+            return 3;
+        }
+    },
+
+    PEER_INFORM {
+        @Override
+        public int getEncoded() {
+            return 4;
+        }
+    },
+
+    PEER_NOTIFY {
+        @Override
+        public int getEncoded() {
+            return 5;
+        }
+    },
+
+    REPLY_LIST {
+        @Override
+        public int getEncoded() {
+            return 6;
+        }
+    },
+
+    REPLY_DETAILS {
         @Override
         public int getEncoded() {
             return 7;
+        }
+    },
+
+    CHECK_ACTIVE {
+        @Override
+        public int getEncoded() {
+            return 10;
         }
     };
 

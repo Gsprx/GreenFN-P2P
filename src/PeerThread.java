@@ -24,7 +24,7 @@ public class PeerThread extends Thread{
             int func = in.readInt();
             switch (func) {
                 // checkActive
-                case 5:
+                case 10:
                     checkActive();
                     break;
                 default:

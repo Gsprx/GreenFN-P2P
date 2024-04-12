@@ -53,7 +53,6 @@ public class Peer {
             // option 2: peer login
             else {
                 peerLogin();
-                System.out.println("-------------------------------------------\n");
             }
         }
     }
@@ -175,9 +174,6 @@ public class Peer {
         }
 
         if (response != 0) {
-            // start the thread for the user
-            Thread runPeer = new Thread(()->runLoggedIn(response));
-            runPeer.start();
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {
@@ -192,6 +188,8 @@ public class Peer {
                 }
             });
             runServer.start();
+
+            runLoggedIn(response);
         }
         else System.out.println("[-] Wrong credentials");
     }
@@ -278,22 +276,20 @@ public class Peer {
         try {
             Socket socket = new Socket(ip, port);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
             // write to peer
             out.writeInt(Function.CHECK_ACTIVE.getEncoded());
             out.flush();
             // wait for response
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             String response = (String) in.readObject();
-            System.out.println(response);
+            System.out.println(response + "\n");
 
             out.close();
             in.close();
             socket.close();
-        } catch (UnknownHostException e) {
-            System.out.println("[-] Host with ip: [" + ip + "] at port: [" + port + "] is not found.\n");
         } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException(e);
+            System.out.println("[-] Host with ip: [" + ip + "] at port: [" + port + "] is not found.\n");
         }
     }
 
@@ -308,13 +304,14 @@ public class Peer {
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             //Send register code
-            out.writeInt(3);
+            out.writeInt(Function.LOGOUT.getEncoded());
             out.flush();
             //Send tokenID
             out.writeInt(token);
             out.flush();
+            // wait for input
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             response = in.readInt();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -385,6 +382,8 @@ public class Peer {
 
     public static void main(String[] args) {
         Peer peer = new Peer(args[0], Integer.parseInt(args[1]));
-        peer.runPeer();
+        // start the thread for the user
+        Thread runPeer = new Thread(peer::runPeer);
+        runPeer.start();
     }
 }
