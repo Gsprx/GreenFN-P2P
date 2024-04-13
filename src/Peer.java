@@ -8,13 +8,16 @@ import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Scanner;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class Peer {
-    String ip;
-    int port;
+    private String ip;
+    private int port;
+    private int tokenID;
+    private ArrayList<String> filesInNetwork;
     public Peer(String ip, int port) {
         this.ip = ip;
         this.port = port;
@@ -174,6 +177,7 @@ public class Peer {
         }
 
         if (response != 0) {
+            this.tokenID =response;
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {
@@ -189,7 +193,7 @@ public class Peer {
             });
             runServer.start();
 
-            runLoggedIn(response);
+            runLoggedIn(this.tokenID);
         }
         else System.out.println("[-] Wrong credentials");
     }
@@ -217,10 +221,12 @@ public class Peer {
                 // option 1: list
                 case "1":
                     // TODO: List
+                    this.list();
                     break;
                 // option 2: details
                 case "2":
                     // TODO: Details
+                    this.details();
                     break;
                 // option 3: check active
                 case "3":
@@ -232,10 +238,100 @@ public class Peer {
                     break;
                 // option 5: logout
                 default:
-                    logout(token);
+                    logout(this.tokenID);
                     running = false;
                     break;
             }
+        }
+    }
+    /**
+     * Option 1 | List
+     * Request from Tracker the list of available files within the P2P network.
+     */
+    private void list(){
+        System.out.println("\n|List|");
+        try {
+            Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
+            //send tokenID
+            out.writeInt(this.tokenID);
+            out.flush();
+            //read files
+            ArrayList<String> files = (ArrayList<String>) in.readObject();
+            if(!files.isEmpty()){
+                System.out.println("The available files are: ");
+                files.forEach(System.out::println);
+            }
+            this.filesInNetwork = new ArrayList<>(files);
+//        } catch (UnknownHostException e) {
+//            throw new RuntimeException(e);
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    /**
+     * Option 2 | Details
+     * Send Tracker the name of an available file.
+     * Request from Tracker the details (ip, port, count_downloads, count_failures) of network peers for the specific file,
+     * OR receive FAIL notification if the files does not exist anymore in the network.
+     */
+    private void details(){
+        if(!this.filesInNetwork.isEmpty()){
+            System.out.println("\n|Details|");
+            //Input from peer - filename
+            String filename;
+            do {
+                System.out.println("Enter file name you want to receive:");
+                Scanner inp = new Scanner(System.in);
+                filename = inp.nextLine();
+                System.out.println();
+                if(filename.equals("exit")){
+                    System.out.println("Exiting details method.");
+                    return;
+                }
+            }while(!this.filesInNetwork.contains(filename));
+            //Send Tracker request to receive file's information
+            try {
+                Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
+                ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
+                //send tokenID
+                out.writeInt(this.tokenID);
+                out.flush();
+                out.writeObject(filename);
+                out.flush();
+                int verificationCode = in.readInt();
+                switch (verificationCode){
+                    case -1:
+                        System.out.println("No active owners found of requested file");
+                        break;
+                    case 0:
+                        System.out.println("File does not exist within the network.");
+                        break;
+                    case 1:
+                        System.out.println("File's details:");
+                        ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
+                        ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
+                        for(int i=0; i<fileOwnersInfo.size(); i++){
+                            //Maybe write somewhere what are the values we see. Preferable before this for
+                            System.out.println("Peer "+i+": ");
+                            for(int j=0; j<fileOwnersInfo.get(i).length;j++){
+                                System.out.print(fileOwnersInfo.get(i)[j]+ " ");
+                            }
+                            for (int j=0; j<fileOwnersStatistics.get(i).length; j++){
+                                System.out.print(fileOwnersStatistics.get(i)[j]+ " ");
+                            }
+                            System.out.println();
+                            //alt+shift_insert poly grenn fn combo
+                        }
+                        break;
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+        }else {
+            System.out.println("We don't have any available data from the rest of peers. Try option 1 'List'. If this message still appears, then there are no files to be transferred within the network.");
         }
     }
 
@@ -347,10 +443,10 @@ public class Peer {
             out.writeObject(token);
             out.flush();
             //Send peerIP
-            out.writeObject(token);
+            out.writeObject(this.ip);
             out.flush();
             //Send peerPort
-            out.writeObject(token);
+            out.writeObject(this.port);
             out.flush();
 
 
