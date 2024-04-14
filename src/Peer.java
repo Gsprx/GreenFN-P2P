@@ -2,9 +2,7 @@ import misc.Config;
 import misc.Function;
 import misc.TypeChecking;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -235,6 +233,7 @@ public class Peer {
                 // option 4: simple download
                 case "4":
                     // TODO: Simple Download
+                    this.downloadFile();
                     break;
                 // option 5: logout
                 default:
@@ -254,6 +253,9 @@ public class Peer {
             Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
+            //send function code to Tracker
+            out.writeInt(Function.REPLY_LIST.getEncoded());
+            out.flush();
             //send tokenID
             out.writeInt(this.tokenID);
             out.flush();
@@ -296,6 +298,9 @@ public class Peer {
                 Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
                 ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
                 ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
+                //send function code to Tracker
+                out.writeInt(Function.REPLY_DETAILS.getEncoded());
+                out.flush();
                 //send tokenID
                 out.writeInt(this.tokenID);
                 out.flush();
@@ -386,6 +391,43 @@ public class Peer {
             socket.close();
         } catch (IOException | ClassNotFoundException e) {
             System.out.println("[-] Host with ip: [" + ip + "] at port: [" + port + "] is not found.\n");
+        }
+    }
+    /**
+     * Option 4 | Simple download
+     * */
+    private void downloadFile(){
+        /* NOTES for AvraBeast
+        This is how you do it more or less. This part is for Receiving.
+        */
+        try {
+            //Connect with the peer.
+            Socket connectionToPeer = new Socket();
+            ObjectInputStream inputStream = new ObjectInputStream(connectionToPeer.getInputStream());;
+            FileOutputStream fileOutputStream = new FileOutputStream("ReceivedFile.txt");
+            // Delete existing data from the file
+            fileOutputStream.getChannel().truncate(0);
+            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
+            //Open to write in the file
+            fileOutputStream = new FileOutputStream("ReceivedFile.txt", true);
+            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+            //read file parts to be received
+            Double fileParts= inputStream.readDouble();
+            byte[] fileBytes;
+            for (int i=0; i<fileParts; i++){
+                fileBytes = new byte[30]; //Have a place to store the number of bytes. Something like "Function.SIMPLE_DOWNLOAD.getMaxBytesPerPart()"
+                int bytesRead;
+                while ((bytesRead = inputStream.read(fileBytes)) != -1) {
+//                    System.out.println("fileBytes.getClass() "+fileBytes.getClass());
+                    bufferedOutputStream.write(fileBytes, 0, bytesRead);
+                }
+                bufferedOutputStream.flush();
+            }
+            connectionToPeer.close();
+            System.out.println("File received successfully.");
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
