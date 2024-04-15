@@ -49,6 +49,12 @@ public enum Function {
             return 7;
         }
     },
+    SIMPLE_DOWNLOAD {
+        @Override
+        public int getEncoded() {
+            return 8;
+        }
+    },
 
     CHECK_ACTIVE {
         @Override
