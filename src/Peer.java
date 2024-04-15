@@ -16,9 +16,11 @@ public class Peer {
     private int port;
     private int tokenID;
     private ArrayList<String> filesInNetwork;
+
     public Peer(String ip, int port) {
         this.ip = ip;
         this.port = port;
+        filesInNetwork = new ArrayList<>();
     }
 
     /**
@@ -175,7 +177,7 @@ public class Peer {
         }
 
         if (response != 0) {
-            this.tokenID =response;
+            this.tokenID = response;
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {
@@ -191,6 +193,7 @@ public class Peer {
             });
             runServer.start();
 
+            sendTrackerInformation(this.tokenID);
             runLoggedIn(this.tokenID);
         }
         else System.out.println("[-] Wrong credentials");
@@ -252,7 +255,6 @@ public class Peer {
         try {
             Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
             //send function code to Tracker
             out.writeInt(Function.REPLY_LIST.getEncoded());
             out.flush();
@@ -260,6 +262,7 @@ public class Peer {
             out.writeInt(this.tokenID);
             out.flush();
             //read files
+            ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
             ArrayList<String> files = (ArrayList<String>) in.readObject();
             if(!files.isEmpty()){
                 System.out.println("The available files are: ");
@@ -474,21 +477,20 @@ public class Peer {
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             //Send register code
-            out.writeInt(4);
+            out.writeInt(Function.PEER_INFORM.getEncoded());
             out.flush();
             //Send tokenID
             out.writeInt(token);
             out.flush();
             //Send files
-            out.writeObject(token);
+            out.writeObject(filesInNetwork);
             out.flush();
             //Send peerIP
             out.writeObject(this.ip);
             out.flush();
             //Send peerPort
-            out.writeObject(this.port);
+            out.writeObject(Integer.toString(this.port));
             out.flush();
 
 
