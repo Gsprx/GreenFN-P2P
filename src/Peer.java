@@ -321,7 +321,7 @@ public class Peer {
         if(response==1){
             Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.";
         }else {
-            Message = "[+] You donkey kong can't even log out properly.";
+            Message = "[-] You donkey kong can't even log out properly.";
         }
         System.out.println(Message);
     }
