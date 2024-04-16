@@ -271,12 +271,11 @@ public class Peer {
         System.out.println("\n|Details|");
         //Input from peer - filename
         if (filename == null) {
-            System.out.println("Enter file name you want to receive. (exit if don't want to download anything)");
+            System.out.print("Enter file name you want to look up (exit if don't want to loop up for anything): ");
             Scanner inp = new Scanner(System.in);
             filename = inp.nextLine();
-            System.out.println();
-            if(filename.equals("exit")){
-                System.out.println("Exiting...");
+            if(filename.equals("exit")) {
+                System.out.println("Exiting...\n");
                 return null;
             }
         }
@@ -296,10 +295,10 @@ public class Peer {
             int verificationCode = in.readInt();
             switch (verificationCode){
                 case -1:
-                    System.out.println("No active owners found of requested file");
+                    System.out.println("No active owners found of requested file\n");
                     break;
                 case 0:
-                    System.out.println("File does not exist within the network.");
+                    System.out.println("File does not exist within the network.\n");
                     break;
                 case 1:
                     System.out.println("File's details:");
@@ -566,7 +565,6 @@ public class Peer {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             //Send register code
             out.writeInt(Function.LOGOUT.getEncoded());
-            out.flush();
             //Send tokenID
             out.writeInt(token);
             out.flush();
@@ -579,9 +577,9 @@ public class Peer {
         // wait for response (temp response string below)
         String Message;
         if(response==1){
-            Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.";
+            Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.\n";
         }else {
-            Message = "[-] You donkey kong can't even log out properly.";
+            Message = "[-] You donkey kong can't even log out properly.\n";
         }
         System.out.println(Message);
     }
