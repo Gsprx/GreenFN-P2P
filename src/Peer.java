@@ -5,8 +5,7 @@ import misc.TypeChecking;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Scanner;
+import java.util.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -212,11 +211,10 @@ public class Peer {
                     break;
                 // option 3: check active
                 case "3":
-                    checkActive();
+                    checkActive(null, 0);
                     break;
                 // option 4: simple download
                 case "4":
-                    // TODO: Simple Download
                     this.downloadFile();
                     break;
                 // option 5: logout
@@ -261,7 +259,7 @@ public class Peer {
      * Request from Tracker the details (ip, port, count_downloads, count_failures) of network peers for the specific file,
      * OR receive FAIL notification if the files does not exist anymore in the network.
      */
-    private void details() {
+    private Map.Entry<ArrayList<String[]>, ArrayList<int[]>> details() {
         if(!this.filesInNetwork.isEmpty()) {
             System.out.println("\n|Details|");
             //Input from peer - filename
@@ -273,14 +271,13 @@ public class Peer {
                 System.out.println();
                 if(filename.equals("exit")){
                     System.out.println("Exiting details method.");
-                    return;
+                    return null;
                 }
             } while(!this.filesInNetwork.contains(filename));
             //Send Tracker request to receive file's information
             try {
                 Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
                 ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
-                ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
                 //send function code to Tracker
                 out.writeInt(Function.REPLY_DETAILS.getEncoded());
                 out.flush();
@@ -289,6 +286,7 @@ public class Peer {
                 out.flush();
                 out.writeObject(filename);
                 out.flush();
+                ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
                 int verificationCode = in.readInt();
                 switch (verificationCode){
                     case -1:
@@ -313,7 +311,7 @@ public class Peer {
                             System.out.println();
                             //alt+shift_insert poly grenn fn combo
                         }
-                        break;
+                        return new AbstractMap.SimpleEntry<>(fileOwnersInfo, fileOwnersStatistics);
                 }
             } catch (IOException | ClassNotFoundException e) {
                 throw new RuntimeException(e);
@@ -321,40 +319,47 @@ public class Peer {
         }else {
             System.out.println("We don't have any available data from the rest of peers. Try option 1 'List'. If this message still appears, then there are no files to be transferred within the network.");
         }
+        return null;
     }
 
     /**
      * Option 3 | Check Active
      * Try pinging a certain peer.
      * If he responds, then he is active.
+     * @param _ip The given ip address.
+     * @param _port The given port number.
+     * @return If the user with _ip and _port is active.
      */
-    private void checkActive() {
+    private boolean checkActive(String _ip, int _port) {
         System.out.println("\n|Check Active|");
 
-        String ip = null;
-        int port = 6000;
+        String ip = _ip;
+        int port = _port;
 
-        // read ip
-        boolean is_ipv4 = false;
-        while (!is_ipv4) {
-            // get a string of the ip address
-            System.out.print("Enter peer ip address: ");
-            Scanner inp = new Scanner(System.in);
-            ip = inp.nextLine();
-            // check if it is an ip address
-            is_ipv4 = TypeChecking.isIPv4(ip) || ip.equals("localhost");
-        }
+        // if ip is null ask for ip and port
+        if (ip == null) {
+            // read ip
+            boolean is_ipv4 = false;
+            while (!is_ipv4) {
+                // get a string of the ip address
+                System.out.print("Enter peer ip address: ");
+                Scanner inp = new Scanner(System.in);
+                ip = inp.nextLine();
+                // check if it is an ip address
+                is_ipv4 = TypeChecking.isIPv4(ip) || ip.equals("localhost");
+            }
 
-        // read port
-        boolean is_int = false;
-        while (!is_int) {
-            // get a string of the port
-            System.out.print("Enter peer port: ");
-            Scanner inp = new Scanner(System.in);
-            String ans = inp.nextLine();
-            // check if answer is int
-            is_int = TypeChecking.isInteger(ans);
-            if (is_int) port = Integer.parseInt(ans);
+            // read port
+            boolean is_int = false;
+            while (!is_int) {
+                // get a string of the port
+                System.out.print("Enter peer port: ");
+                Scanner inp = new Scanner(System.in);
+                String ans = inp.nextLine();
+                // check if answer is int
+                is_int = TypeChecking.isInteger(ans);
+                if (is_int) port = Integer.parseInt(ans);
+            }
         }
 
         try {
@@ -374,7 +379,9 @@ public class Peer {
             socket.close();
         } catch (IOException | ClassNotFoundException e) {
             System.out.println("[-] Host with ip: [" + ip + "] at port: [" + port + "] is not found.\n");
+            return false;
         }
+        return true;
     }
     /**
      * Option 4 | Simple download
@@ -383,6 +390,53 @@ public class Peer {
         /* NOTES for AvraBeast
         This is how you do it more or less. This part is for Receiving.
         */
+
+        // get the details of the file the peer wants to download
+        Map.Entry<ArrayList<String[]>, ArrayList<int[]>> detailsResult = details();
+        if (detailsResult == null) return;
+        ArrayList<String[]> fileOwnersInfo = detailsResult.getKey();
+        ArrayList<int[]> fileOwnersStatistics = detailsResult.getValue();
+
+        // check the peers who own this file and are active
+        ArrayList<String[]> activeFileOwners = new ArrayList<>();
+        ArrayList<int[]> activeOwnersStats = new ArrayList<>();
+        // hash map with key: peer, value: formula result of peer's statistics
+        HashMap<String[], Double> queue = new HashMap<>();
+        for (int i=0; i<fileOwnersInfo.size(); i++) {
+            // if peer is active add him and his statistics to the candidate list
+            if (checkActive(fileOwnersInfo.get(i)[0], Integer.parseInt(fileOwnersInfo.get(i)[0]))) {
+                // add the peer to a candidate list
+                activeFileOwners.add(fileOwnersInfo.get(i));
+                // add his statistics to a candidate list
+                activeOwnersStats.add(fileOwnersStatistics.get(i));
+                // add the peer with his priority modifier to the hashMap
+                queue.put(fileOwnersInfo.get(i), priorityFormula(fileOwnersStatistics.get(i)[0], fileOwnersStatistics.get(i)[1]));
+            }
+        }
+
+        // check if there are no active owners of the file
+        if (activeFileOwners.isEmpty()) {
+            System.out.println("There are no active owners for this file right now...\n");
+            return;
+        }
+
+        // sort the hashmap
+        ArrayList<Double> temp = new ArrayList<>();
+        HashMap<String[], Double> sortedQueue = new HashMap<>();
+        for (Map.Entry<String[], Double> entry : queue.entrySet()) {
+            temp.add(entry.getValue());
+        }
+        Collections.sort(temp);
+        for (double num : temp) {
+            for (Map.Entry<String[], Double> entry : queue.entrySet()) {
+                if (entry.getValue().equals(num)) {
+                    sortedQueue.put(entry.getKey(), num);
+                }
+            }
+        }
+
+        System.out.println(sortedQueue);
+
         try {
             //Connect with the peer.
             Socket connectionToPeer = new Socket();
@@ -412,6 +466,10 @@ public class Peer {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private double priorityFormula(int countDownloads, int countFailures) {
+        return Math.pow(0.75, countDownloads) * Math.pow(1.25, countFailures);
     }
 
     /**
