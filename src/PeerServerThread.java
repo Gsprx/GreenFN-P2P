@@ -1,3 +1,5 @@
+import misc.Config;
+
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -6,11 +8,13 @@ public class PeerServerThread extends Thread{
     private ObjectInputStream in;
     private Socket connection;
     private ArrayList<String> filesInNetwork;
+    private String shared_directory;
 
-    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork){
+    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, String shared_directory){
         //handle connection
         this.filesInNetwork = filesInNetwork;
         this.connection = connection;
+        this.shared_directory = shared_directory;
         try {
             in = new ObjectInputStream(connection.getInputStream());
         } catch (IOException e) {
@@ -30,12 +34,11 @@ public class PeerServerThread extends Thread{
                     break;
                 case 8:
                     handleSimpleDownload();
-                    connection.close();
                     break;
                 default:
                     break;
             }
-
+            connection.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -63,9 +66,9 @@ public class PeerServerThread extends Thread{
      */
     private void sendFile(String filename){
         //initiate basic stream details
-        File fileToSend = new File(filename);
-        int partSize = 30;
-        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / partSize);
+        String fileToSendName = this.shared_directory +File.separator+filename;
+        File fileToSend = new File(fileToSendName);
+        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / Config.DOWNLOAD_SIZE);
 
         //use try-with-resources block to automatically close streams
         try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
@@ -77,7 +80,7 @@ public class PeerServerThread extends Thread{
             outputStream.flush();
 
             //create byte array of the file partition
-            byte[] fileBytes = new byte[partSize];
+            byte[] fileBytes = new byte[Config.DOWNLOAD_SIZE];
 
 
             //this loop will keep on reading partitions of partSize and send them to the receiver peer

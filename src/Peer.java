@@ -173,7 +173,7 @@ public class Peer {
                     ServerSocket server = new ServerSocket(this.port);
                     while(true){
                         Socket inConnection = server.accept();
-                        Thread t = new PeerServerThread(inConnection, filesInNetwork);
+                        Thread t = new PeerServerThread(inConnection, filesInNetwork,this.shared_directory);
                         t.start();
                     }
                 } catch (IOException e) {
@@ -395,7 +395,7 @@ public class Peer {
         Scanner inp = new Scanner(System.in);
         String fileName = inp.nextLine();
         if(fileName.equals("exit")){
-            System.out.println("Exiting...");
+            System.out.println("Exiting...\n");
             return;
         }
         // get the details of the file the peer wants to download
@@ -478,18 +478,19 @@ public class Peer {
                 }
                 // result 1 = file exists
                 else {
-                    FileOutputStream fileOutputStream = new FileOutputStream("ReceivedFile.txt");
+                    String pathToStore = this.shared_directory+ File.separator+fileName;
+                    FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
                     // Delete existing data from the file
                     fileOutputStream.getChannel().truncate(0);
                     fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
                     //Open to write in the file
-                    fileOutputStream = new FileOutputStream("ReceivedFile.txt", true);
+                    fileOutputStream = new FileOutputStream(pathToStore, true);
                     BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
                     //read file parts to be received
                     Double fileParts = in.readDouble();
                     byte[] fileBytes;
                     for (int i=0; i<fileParts; i++){
-                        fileBytes = new byte[30]; //Have a place to store the number of bytes. Something like "Function.SIMPLE_DOWNLOAD.getMaxBytesPerPart()"
+                        fileBytes = new byte[Config.DOWNLOAD_SIZE];
                         int bytesRead;
                         while ((bytesRead = in.read(fileBytes)) != -1) {
                             //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
