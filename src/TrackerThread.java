@@ -364,23 +364,17 @@ public class TrackerThread extends Thread{
             //identify requester
             int tokenID = in.readInt();
 
-            //get network info on user to connect the socket to
-            String[] info = activeUsers.get(tokenID);
-            String ip = info[0];
-            String port = info[1];
-
-            Socket replySocket = new Socket(ip,Integer.parseInt(port));
             ArrayList<String> files = new ArrayList<>();
 
             for(String file : allFiles){
-                files.add(new String(file));
+                files.add(file);
             }
 
             //send files to requester
-            ObjectOutputStream out = new ObjectOutputStream(replySocket.getOutputStream());
+            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             out.writeObject(files);
             out.flush();
-            Tracker.printMessage("User: " + info[2] + "received a copy of all the file names available in the system");
+            Tracker.printMessage("User with token: " + tokenID + " received a copy of all the file names available in the system");
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -396,13 +390,7 @@ public class TrackerThread extends Thread{
             //get file name
             String filename = (String) in.readObject();
 
-            //get requesters info for reply
-            String[] requesterInfo = activeUsers.get(tokenID);
-            String replyIP = requesterInfo[0];
-            int replyPort = Integer.parseInt(requesterInfo[1]);
-
-            Socket replySocket = new Socket(replyIP, replyPort);
-            ObjectOutputStream out = new ObjectOutputStream(replySocket.getOutputStream());
+            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
 
             //requested file does not exist in the system
             if(!allowedFiles.containsKey(filename)){
