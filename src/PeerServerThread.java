@@ -71,7 +71,7 @@ public class PeerServerThread extends Thread{
         int partSize = 30;
         int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / partSize);
 
-        //use try-with-resources block to automatically close steams for efficiency
+        //use try-with-resources block to automatically close streams
         try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
              BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
              ObjectOutputStream outputStream = new ObjectOutputStream(this.connection.getOutputStream())) {
