@@ -171,7 +171,7 @@ public class Peer {
                     ServerSocket server = new ServerSocket(this.port);
                     while(true){
                         Socket inConnection = server.accept();
-                        Thread t = new PeerServerThread(inConnection);
+                        Thread t = new PeerServerThread(inConnection, filesInNetwork);
                         t.start();
                     }
                 } catch (IOException e) {

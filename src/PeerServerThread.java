@@ -1,12 +1,15 @@
 import java.io.*;
 import java.net.Socket;
+import java.util.ArrayList;
 
 public class PeerServerThread extends Thread{
     private ObjectInputStream in;
     private Socket connection;
+    private ArrayList<String> filesInNetwork;
 
-    public PeerServerThread(Socket connection){
+    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork){
         //handle connection
+        this.filesInNetwork = filesInNetwork;
         this.connection = connection;
         try {
             in = new ObjectInputStream(connection.getInputStream());
@@ -26,7 +29,7 @@ public class PeerServerThread extends Thread{
                     checkActive();
                     break;
                 case 11:
-                    this.sendFile();
+                    this.handleSimpleDownload();
                     connection.close();
                     break;
                 default:
@@ -37,38 +40,59 @@ public class PeerServerThread extends Thread{
             throw new RuntimeException(e);
         }
     }
+
+
+
+    private void handleSimpleDownload(){
+        //check if file requested is available
+        try {
+            String filename = (String) in.readObject();
+            //peer does not have the requested file
+            if(!filesInNetwork.contains(filename)){
+                sendResult(new ObjectOutputStream(connection.getOutputStream()),0);
+            }
+
+            sendResult(new ObjectOutputStream(connection.getOutputStream()),1);
+            sendFile(filename);
+
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+
     /**
      * Option | Send file to peer.
      */
-    private void sendFile(){
-        try {
-            //File you want to send
-            File fileToSend = new File("File.txt");
-            double numberOfPartsToSend = Math.ceil((double) fileToSend.length()/30);
-            //Kalytera na to spaei kai na to stelnei se kommatia.
-            byte[] fileBytes;
-            FileInputStream fileInputStream = null;
-            fileInputStream = new FileInputStream(fileToSend);
-            BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
-            ObjectOutputStream outputStream = new ObjectOutputStream(this.connection.getOutputStream());
-            //Send number of parts to expect
-            //We send the last part separately because otherwise we would have null values.
-            outputStream.writeDouble(numberOfPartsToSend);
-            outputStream.flush();
-            for (int i=0; i<numberOfPartsToSend-1; i++){
-                fileBytes = new byte[(int) 30];
-                bufferedInputStream.read(fileBytes, 0, 30);
-                //write individual part
-                outputStream.write(fileBytes, 0, 30);
-                outputStream.flush();
-            }
-            //send last part
-            fileBytes = new byte[(int) fileToSend.length()%30];
-            bufferedInputStream.read(fileBytes, 0, (int) fileToSend.length()%30);
-            //write last individual part
-            outputStream.write(fileBytes, 0, (int) fileToSend.length()%30);
+    private void sendFile(String filename){
+        //initiate basic stream details
+        File fileToSend = new File(filename);
+        int partSize = 30;
+        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / partSize);
+
+        //use try-with-resources block to automatically close streams
+        try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
+             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
+             ObjectOutputStream outputStream = new ObjectOutputStream(this.connection.getOutputStream())) {
+
+            //send number of parts to be sent in total
+            outputStream.writeInt(numberOfPartsToSend);
             outputStream.flush();
 
+            //create byte array of the file partition
+            byte[] fileBytes = new byte[partSize];
+
+
+            //this loop will keep on reading partitions of partSize and send them to the receiver peer
+            //until the byte stream has nothing more to read.
+            //read method returns -1 when there are no more bytes to be read
+            int i;
+            while ((i = bufferedInputStream.read(fileBytes)) != -1) {
+                //the read bytes are placed into the byte array fileBytes and sent to the receiver peer
+                outputStream.write(fileBytes, 0, i);
+                outputStream.flush();
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
