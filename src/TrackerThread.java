@@ -16,8 +16,6 @@ public class TrackerThread extends Thread{
     private ConcurrentHashMap<String, HashSet<Integer>> allowedFiles;
     private HashSet<String> allFiles;
 
-
-
     public TrackerThread(Socket connection, ConcurrentHashMap<String, String> registeredUsers, ConcurrentHashMap<Integer,String[]> activeUsers,
                          ConcurrentHashMap<String, int[]> userCountStatistics, ConcurrentHashMap<String, HashSet<Integer>> allowedFiles, HashSet<String> allFiles) {
         this.connection = connection;
@@ -33,8 +31,6 @@ public class TrackerThread extends Thread{
             throw new RuntimeException(e);
         }
     }
-
-
 
     /*
         Tracker thread will serve the peer it's connected to until the peer decides to log out.
@@ -328,7 +324,6 @@ public class TrackerThread extends Thread{
             //identify username of sender
             String senderUsername = (String) in.readObject();
 
-
             //add recipient to list of owners of the file
             allowedFiles.merge(filename, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
                 oldList.addAll(newList);
@@ -374,7 +369,6 @@ public class TrackerThread extends Thread{
             String ip = info[0];
             String port = info[1];
 
-
             Socket replySocket = new Socket(ip,Integer.parseInt(port));
             ArrayList<String> files = new ArrayList<>();
 
@@ -387,8 +381,6 @@ public class TrackerThread extends Thread{
             out.writeObject(files);
             out.flush();
             Tracker.printMessage("User: " + info[2] + "received a copy of all the file names available in the system");
-
-
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -403,7 +395,6 @@ public class TrackerThread extends Thread{
             int tokenID = in.readInt();
             //get file name
             String filename = (String) in.readObject();
-
 
             //get requesters info for reply
             String[] requesterInfo = activeUsers.get(tokenID);

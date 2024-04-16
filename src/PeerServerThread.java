@@ -1,11 +1,11 @@
 import java.io.*;
 import java.net.Socket;
 
-public class PeerThread extends Thread{
+public class PeerServerThread extends Thread{
     private ObjectInputStream in;
     private Socket connection;
 
-    public PeerThread(Socket connection){
+    public PeerServerThread(Socket connection){
         //handle connection
         this.connection = connection;
         try {

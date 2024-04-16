@@ -5,7 +5,6 @@ import misc.TypeChecking;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Scanner;
 import java.security.MessageDigest;
@@ -81,16 +80,6 @@ public class Peer {
         inp = new Scanner(System.in);
         password = inp.nextLine();
 
-        // TODO: Send to tracker and wait for response
-        // BTW eftiaxa kati poly wraia config kai trackerfunction arxeia gia na mhn grafete ta ports, ta ips kai
-        // tis leitourgies tou tracker me to xeri kathe fora
-        /*
-          NOTE TO NIKOS:
-          Το response θα λέει για επιτυχημένο ή αποτυχημένο register.
-          Βάζω μια μεταβλητά response απο κάτω για να συνεχίσω το flow της κονσόλας.
-          Όταν εσυ θα κανείς τα streams, βάλε αυτή η μεταβλητή να παίρνει την τιμή της απο τον tracker
-          (αν απέτυχε 0, αν πέτυχε 1)
-         */
         int response;
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -142,14 +131,6 @@ public class Peer {
         inp = new Scanner(System.in);
         password = inp.nextLine();
 
-        // TODO: Send to tracker and wait for response
-        /*
-          NOTE TO NIKOS:
-          Το response θα λέει για επιτυχημένο ή αποτυχημένο login.
-          Βάζω μια μεταβλητά response απο κάτω για να συνεχίσω το flow της κονσόλας.
-          Όταν εσυ θα κανείς τα streams, βάλε αυτή η μεταβλητή να παίρνει την τιμή της απο τον tracker
-          (αν απέτυχε 0, αν πέτυχε το token_id) green fn
-         */
         int response;
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -184,7 +165,7 @@ public class Peer {
                     ServerSocket server = new ServerSocket(this.port);
                     while(true){
                         Socket inConnection = server.accept();
-                        Thread t = new PeerThread(inConnection);
+                        Thread t = new PeerServerThread(inConnection);
                         t.start();
                     }
                 } catch (IOException e) {
@@ -246,11 +227,12 @@ public class Peer {
             }
         }
     }
+
     /**
      * Option 1 | List
      * Request from Tracker the list of available files within the P2P network.
      */
-    private void list(){
+    private void list() {
         System.out.println("\n|List|");
         try {
             Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -269,8 +251,6 @@ public class Peer {
                 files.forEach(System.out::println);
             }
             this.filesInNetwork = new ArrayList<>(files);
-//        } catch (UnknownHostException e) {
-//            throw new RuntimeException(e);
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -281,8 +261,8 @@ public class Peer {
      * Request from Tracker the details (ip, port, count_downloads, count_failures) of network peers for the specific file,
      * OR receive FAIL notification if the files does not exist anymore in the network.
      */
-    private void details(){
-        if(!this.filesInNetwork.isEmpty()){
+    private void details() {
+        if(!this.filesInNetwork.isEmpty()) {
             System.out.println("\n|Details|");
             //Input from peer - filename
             String filename;
@@ -295,7 +275,7 @@ public class Peer {
                     System.out.println("Exiting details method.");
                     return;
                 }
-            }while(!this.filesInNetwork.contains(filename));
+            } while(!this.filesInNetwork.contains(filename));
             //Send Tracker request to receive file's information
             try {
                 Socket tracker = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -473,7 +453,7 @@ public class Peer {
      * Send tokenID, files(Name because its unique), peerIP, peerPort to tracker so the tracker can store them.
      */
     //TODO where to we store the files(Name because its unique), peerIP, peerPort, so we can send them to the tracker?
-    private void sendTrackerInformation(int token){
+    private void sendTrackerInformation(int token) {
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
