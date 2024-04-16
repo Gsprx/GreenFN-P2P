@@ -28,8 +28,8 @@ public class PeerServerThread extends Thread{
                 case 10:
                     checkActive();
                     break;
-                case 11:
-                    this.handleSimpleDownload();
+                case 8:
+                    handleSimpleDownload();
                     connection.close();
                     break;
                 default:
@@ -40,8 +40,6 @@ public class PeerServerThread extends Thread{
             throw new RuntimeException(e);
         }
     }
-
-
 
     private void handleSimpleDownload(){
         //check if file requested is available
@@ -58,9 +56,7 @@ public class PeerServerThread extends Thread{
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
-
     }
-
 
     /**
      * Option | Send file to peer.

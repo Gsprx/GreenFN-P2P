@@ -5,6 +5,7 @@ import misc.TypeChecking;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -209,13 +210,11 @@ public class Peer {
             switch (option) {
                 // option 1: list
                 case "1":
-                    // TODO: List
                     this.list();
                     break;
                 // option 2: details
                 case "2":
-                    // TODO: Details
-                    this.details();
+                    this.details(null);
                     break;
                 // option 3: check active
                 case "3":
@@ -265,18 +264,21 @@ public class Peer {
      * Send Tracker the name of an available file.
      * Request from Tracker the details (ip, port, count_downloads, count_failures) of network peers for the specific file,
      * OR receive FAIL notification if the files does not exist anymore in the network.
+     * @param filename The name of the file we want to look up.
+     * @return A pair of the peers that own the files along with the statistics of each peer for the file.
      */
-    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details() {
+    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename) {
         System.out.println("\n|Details|");
         //Input from peer - filename
-        String filename;
-        System.out.println("Enter file name you want to receive. (exit if don't want to download anything)");
-        Scanner inp = new Scanner(System.in);
-        filename = inp.nextLine();
-        System.out.println();
-        if(filename.equals("exit")){
-            System.out.println("Exiting details method.");
-            return null;
+        if (filename == null) {
+            System.out.println("Enter file name you want to receive. (exit if don't want to download anything)");
+            Scanner inp = new Scanner(System.in);
+            filename = inp.nextLine();
+            System.out.println();
+            if(filename.equals("exit")){
+                System.out.println("Exiting...");
+                return null;
+            }
         }
         //Send Tracker request to receive file's information
         try {
@@ -388,12 +390,17 @@ public class Peer {
      * Option 4 | Simple download
      * */
     private void downloadFile(){
-        /* NOTES for AvraBeast
-        This is how you do it more or less. This part is for Receiving.
-        */
-
+        // get file name
+        System.out.println("\n|Download File|");
+        System.out.print("File name: ");
+        Scanner inp = new Scanner(System.in);
+        String fileName = inp.nextLine();
+        if(fileName.equals("exit")){
+            System.out.println("Exiting...");
+            return;
+        }
         // get the details of the file the peer wants to download
-        Map.Entry<ArrayList<String[]>, ArrayList<int[]>> detailsResult = details();
+        Map.Entry<ArrayList<String[]>, ArrayList<int[]>> detailsResult = details(fileName);
         if (detailsResult == null) return;
         ArrayList<String[]> fileOwnersInfo = detailsResult.getKey();
         ArrayList<int[]> fileOwnersStatistics = detailsResult.getValue();
@@ -436,41 +443,114 @@ public class Peer {
             }
         }
 
-        System.out.println(sortedQueue);
+        System.out.println("\n========================" + sortedQueue + "========================\n");
+        ArrayList<String[]> sortedPeers = new ArrayList<>();
+        for (Map.Entry<String[], Double> entry : sortedQueue.entrySet()) sortedPeers.add(entry.getKey());
 
-        try {
-            //Connect with the peer.
-            Socket connectionToPeer = new Socket();
-            ObjectInputStream inputStream = new ObjectInputStream(connectionToPeer.getInputStream());;
-            FileOutputStream fileOutputStream = new FileOutputStream("ReceivedFile.txt");
-            // Delete existing data from the file
-            fileOutputStream.getChannel().truncate(0);
-            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
-            //Open to write in the file
-            fileOutputStream = new FileOutputStream("ReceivedFile.txt", true);
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
-            //read file parts to be received
-            Double fileParts= inputStream.readDouble();
-            byte[] fileBytes;
-            for (int i=0; i<fileParts; i++){
-                fileBytes = new byte[30]; //Have a place to store the number of bytes. Something like "Function.SIMPLE_DOWNLOAD.getMaxBytesPerPart()"
-                int bytesRead;
-                while ((bytesRead = inputStream.read(fileBytes)) != -1) {
-//                    System.out.println("fileBytes.getClass() "+fileBytes.getClass());
-                    bufferedOutputStream.write(fileBytes, 0, bytesRead);
-                }
-                bufferedOutputStream.flush();
+        // try to download from peer
+        boolean downloaded = false;
+        while (!downloaded) {
+            // check if the download failed from all the peers
+            if (sortedPeers.isEmpty()) {
+                System.out.println("Download failed from all the peers");
+                return;
             }
-            connectionToPeer.close();
-            System.out.println("File received successfully.");
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            // get the first from the candidate list
+            String[] currentPeer = sortedPeers.get(0);
+
+            // try to establish connection with peer
+            try {
+                Socket downloadSocket = new Socket(currentPeer[0], Integer.parseInt(currentPeer[1]));
+                ObjectOutputStream out = new ObjectOutputStream(downloadSocket.getOutputStream());
+
+                // code for simple download: 8
+                out.writeInt(Function.SIMPLE_DOWNLOAD.getEncoded());
+                out.writeObject(fileName);
+                out.flush();
+
+                // wait for response
+                ObjectInputStream in = new ObjectInputStream(downloadSocket.getInputStream());
+                int result = (int) in.readObject();
+                // result 0 = file does not exist
+                if (result == 0) {
+                    System.out.println("This file does not exist...");
+                    return;
+                }
+                // result 1 = file exists
+                else {
+                    FileOutputStream fileOutputStream = new FileOutputStream("ReceivedFile.txt");
+                    // Delete existing data from the file
+                    fileOutputStream.getChannel().truncate(0);
+                    fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
+                    //Open to write in the file
+                    fileOutputStream = new FileOutputStream("ReceivedFile.txt", true);
+                    BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+                    //read file parts to be received
+                    Double fileParts = in.readDouble();
+                    byte[] fileBytes;
+                    for (int i=0; i<fileParts; i++){
+                        fileBytes = new byte[30]; //Have a place to store the number of bytes. Something like "Function.SIMPLE_DOWNLOAD.getMaxBytesPerPart()"
+                        int bytesRead;
+                        while ((bytesRead = in.read(fileBytes)) != -1) {
+                            //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
+                            bufferedOutputStream.write(fileBytes, 0, bytesRead);
+                        }
+                        bufferedOutputStream.flush();
+                    }
+                    // close
+                    out.close();
+                    in.close();
+                    downloadSocket.close();
+
+                    // notify tracker for successful download
+                    System.out.println("File received successfully.");
+                    notifyTracker(1, currentPeer, fileName);
+                    downloaded = true;
+                }
+            } catch (IOException e) {
+                System.out.println("Something went wrong...Could not download file from peer.");
+                // inform tracker for failed download
+                notifyTracker(0, currentPeer, fileName);
+                // remove failed download peer
+                sortedPeers.remove(0);
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
     private double priorityFormula(int countDownloads, int countFailures) {
         return Math.pow(0.75, countDownloads) * Math.pow(1.25, countFailures);
+    }
+
+    private void notifyTracker(int code, String[] currentPeer, String fileName) {
+        try {
+            Socket notifyTrackerForFail = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream tracker_out = new ObjectOutputStream(notifyTrackerForFail.getOutputStream());
+            // code for notify: 5
+            tracker_out.writeInt(Function.PEER_NOTIFY.getEncoded());
+            if (code == 0) {
+                // code for failed download: 0
+                tracker_out.writeInt(code);
+                // token-id
+                tracker_out.writeInt(this.tokenID);
+            } else {
+                // code for successful download: 1
+                tracker_out.writeInt(code);
+                // token-id
+                tracker_out.writeInt(this.tokenID);
+                // file name
+                tracker_out.writeObject(fileName);
+            }
+            // peer username
+            tracker_out.writeObject(currentPeer[2]);
+            tracker_out.flush();
+            // close output stream
+            tracker_out.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -612,7 +692,7 @@ public class Peer {
 
     public static void main(String[] args) {
         //IP-Port-Shared_Directory Path
-        Peer peer = new Peer(args[0], Integer.parseInt(args[1]), String.valueOf(args[2]));
+        Peer peer = new Peer(args[0], Integer.parseInt(args[1]), args[2]);
         // start the thread for the user
         Thread runPeer = new Thread(peer::runPeer);
         runPeer.start();
