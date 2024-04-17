@@ -48,13 +48,14 @@ public class PeerServerThread extends Thread{
         //check if file requested is available
         try {
             String filename = (String) in.readObject();
+            ObjectOutputStream out = new ObjectOutputStream(this.connection.getOutputStream());
             //peer does not have the requested file
             if(!filesInNetwork.contains(filename)){
-                sendResult(new ObjectOutputStream(connection.getOutputStream()),0);
+                sendResult(out,0);
             }
 
-            sendResult(new ObjectOutputStream(connection.getOutputStream()),1);
-            sendFile(filename);
+            sendResult(out,1);
+            sendFile(out, filename);
 
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -64,7 +65,7 @@ public class PeerServerThread extends Thread{
     /**
      * Option | Send file to peer.
      */
-    private void sendFile(String filename){
+    private void sendFile(ObjectOutputStream out, String filename){
         //initiate basic stream details
         String fileToSendName = this.shared_directory +File.separator+filename;
         File fileToSend = new File(fileToSendName);
@@ -72,12 +73,11 @@ public class PeerServerThread extends Thread{
 
         //use try-with-resources block to automatically close streams
         try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
-             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
-             ObjectOutputStream outputStream = new ObjectOutputStream(this.connection.getOutputStream())) {
+             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
 
             //send number of parts to be sent in total
-            outputStream.writeInt(numberOfPartsToSend);
-            outputStream.flush();
+            out.writeInt(numberOfPartsToSend);
+            out.flush();
 
             //create byte array of the file partition
             byte[] fileBytes = new byte[Config.DOWNLOAD_SIZE];
@@ -89,8 +89,8 @@ public class PeerServerThread extends Thread{
             int i;
             while ((i = bufferedInputStream.read(fileBytes)) != -1) {
                 //the read bytes are placed into the byte array fileBytes and sent to the receiver peer
-                outputStream.write(fileBytes, 0, i);
-                outputStream.flush();
+                out.write(fileBytes, 0, i);
+                out.flush();
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

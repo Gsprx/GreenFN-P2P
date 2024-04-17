@@ -412,7 +412,7 @@ public class TrackerThread extends Thread{
             ArrayList<int[]> fileOwnersStatistics = new ArrayList<>();
 
             //check all owners of requested file
-            HashSet<Integer> fileOwnerIDs = allowedFiles.get(filename);
+            HashSet<Integer> fileOwnerIDs = new HashSet<>(allowedFiles.get(filename));
             for(int ownerID : fileOwnerIDs){
                 if(checkActive(ownerID)){
                     //get specific active owners info

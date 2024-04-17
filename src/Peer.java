@@ -334,6 +334,7 @@ public class Peer {
                         }
                         System.out.println();
                     }
+                    System.out.println();
                     return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
             }
         } catch (IOException | ClassNotFoundException e) {
@@ -429,7 +430,8 @@ public class Peer {
         HashMap<String[], Double> queue = new HashMap<>();
         for (int i=0; i<fileOwnersInfo.size(); i++) {
             // if peer is active add him and his statistics to the candidate list
-            if (checkActive(fileOwnersInfo.get(i)[0], Integer.parseInt(fileOwnersInfo.get(i)[0]))) {
+            System.out.println("Checking if host " + fileOwnersInfo.get(i)[2] + " is active...");
+            if (checkActive(fileOwnersInfo.get(i)[0], Integer.parseInt(fileOwnersInfo.get(i)[1]))) {
                 // add the peer to a candidate list
                 activeFileOwners.add(fileOwnersInfo.get(i));
                 // add his statistics to a candidate list
@@ -460,7 +462,6 @@ public class Peer {
             }
         }
 
-        System.out.println("\n========================" + sortedQueue + "========================\n");
         ArrayList<String[]> sortedPeers = new ArrayList<>();
         for (Map.Entry<String[], Double> entry : sortedQueue.entrySet()) sortedPeers.add(entry.getKey());
 
@@ -474,7 +475,7 @@ public class Peer {
             }
 
             // get the first from the candidate list
-            String[] currentPeer = sortedPeers.get(0);
+            String[] currentPeer = sortedPeers.remove(0);
 
             // try to establish connection with peer
             try {
@@ -492,11 +493,10 @@ public class Peer {
                 // result 0 = file does not exist
                 if (result == 0) {
                     System.out.println("This file does not exist...");
-                    return;
                 }
                 // result 1 = file exists
                 else {
-                    String pathToStore = this.shared_directory+ File.separator+fileName;
+                    String pathToStore = this.shared_directory + File.separator + fileName;
                     FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
                     // Delete existing data from the file
                     fileOutputStream.getChannel().truncate(0);
@@ -505,7 +505,7 @@ public class Peer {
                     fileOutputStream = new FileOutputStream(pathToStore, true);
                     BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
                     //read file parts to be received
-                    Double fileParts = in.readDouble();
+                    int fileParts = in.readInt();
                     byte[] fileBytes;
                     for (int i=0; i<fileParts; i++){
                         fileBytes = new byte[Config.DOWNLOAD_SIZE];
@@ -516,6 +516,7 @@ public class Peer {
                         }
                         bufferedOutputStream.flush();
                     }
+                    bufferedOutputStream.close();
                     // close
                     out.close();
                     in.close();
@@ -528,10 +529,9 @@ public class Peer {
                 }
             } catch (IOException e) {
                 System.out.println("Something went wrong...Could not download file from peer.");
+                e.printStackTrace();
                 // inform tracker for failed download
                 notifyTracker(0, currentPeer, fileName);
-                // remove failed download peer
-                sortedPeers.remove(0);
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
