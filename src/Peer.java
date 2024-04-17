@@ -21,6 +21,8 @@ public class Peer {
     private String shared_directory;
     private int tokenID;
     private ArrayList<String> filesInNetwork;
+    ServerSocket peerServer;
+    boolean serverIsAlive;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
@@ -170,9 +172,10 @@ public class Peer {
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {
-                    ServerSocket server = new ServerSocket(this.port);
-                    while(true){
-                        Socket inConnection = server.accept();
+                    peerServer = new ServerSocket(this.port);
+                    this.serverIsAlive = true;
+                    while(serverIsAlive){
+                        Socket inConnection = peerServer.accept();
                         Thread t = new PeerServerThread(inConnection, filesInNetwork,this.shared_directory);
                         t.start();
                     }
@@ -559,7 +562,6 @@ public class Peer {
      * Send request to tracker so the tracker can remove token_id of user
      */
     private void logout(int token) {
-        // TODO: Send logout request to tracker
         int response;
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -578,6 +580,12 @@ public class Peer {
         // wait for response (temp response string below)
         String Message;
         if(response==1){
+            try {
+                peerServer.close();
+                this.serverIsAlive = false;
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
             Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.\n";
         }else {
             Message = "[-] You donkey kong can't even log out properly.\n";
