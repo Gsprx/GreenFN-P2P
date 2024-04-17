@@ -101,7 +101,7 @@ public class PeerServerThread extends Thread{
      */
     private void checkActive() {
         try {
-            String response = "[+] Host is active.";
+            int response = 1;
 
             // send response
             sendResult(new ObjectOutputStream(connection.getOutputStream()), response);
