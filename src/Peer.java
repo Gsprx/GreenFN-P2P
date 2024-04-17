@@ -311,14 +311,24 @@ public class Peer {
                     System.out.println("File's details:");
                     ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
                     ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
+                    System.out.println("Peer\t|" + "IP\t\t\t\t|" + "Port\t|" + "Username\t\t\t\t|" + "Downloads\t\t|" + "Fails");
                     for(int i=0; i<fileOwnersInfo.size(); i++){
                         //Maybe write somewhere what are the values we see. Preferable before this for
-                        System.out.print("Peer " + (i + 1) + ": ");
+                        System.out.println("--------|---------------|-------|-----------------------|---------------|-------------------");
+                        System.out.print((i + 1) + "\t".repeat(2 - (Integer.toString((i + 1)).length() / 4)) + "|");
                         for(int j=0; j<fileOwnersInfo.get(i).length; j++){
-                            System.out.print(fileOwnersInfo.get(i)[j]+ " ");
+                            if (j==0) // ip
+                                System.out.print(fileOwnersInfo.get(i)[j] + "\t".repeat(4 - (fileOwnersInfo.get(i)[j].length() / 4)) + "|");
+                            else if (j==1) // port
+                                System.out.print(fileOwnersInfo.get(i)[j] + "\t".repeat(2 - (fileOwnersInfo.get(i)[j].length() / 4)) + "|");
+                            else // username
+                                System.out.print(fileOwnersInfo.get(i)[j] + "\t".repeat(6 - (fileOwnersInfo.get(i)[j].length() / 4)) + "|");
                         }
                         for (int j=0; j<fileOwnersStatistics.get(i).length; j++){
-                            System.out.print(fileOwnersStatistics.get(i)[j]+ " ");
+                            if (j == 0) // downloads
+                                System.out.print(fileOwnersStatistics.get(i)[j] + "\t".repeat(4 - (Integer.toString(fileOwnersStatistics.get(i)[j]).length() / 4)) + "|");
+                            else // fails
+                                System.out.print(fileOwnersStatistics.get(i)[j]);
                         }
                         System.out.println();
                     }
