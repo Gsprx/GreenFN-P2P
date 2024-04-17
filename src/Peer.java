@@ -262,6 +262,7 @@ public class Peer {
                 System.out.println("The available files are: ");
                 files.forEach(System.out::println);
             }
+            System.out.println();
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -292,12 +293,11 @@ public class Peer {
             ObjectOutputStream out = new ObjectOutputStream(tracker.getOutputStream());
             //send function code to Tracker
             out.writeInt(Function.REPLY_DETAILS.getEncoded());
-            out.flush();
             //send tokenID
             out.writeInt(this.tokenID);
-            out.flush();
             out.writeObject(filename);
             out.flush();
+
             ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
             int verificationCode = in.readInt();
             switch (verificationCode){
@@ -313,17 +313,16 @@ public class Peer {
                     ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
                     for(int i=0; i<fileOwnersInfo.size(); i++){
                         //Maybe write somewhere what are the values we see. Preferable before this for
-                        System.out.println("Peer "+i+": ");
-                        for(int j=0; j<fileOwnersInfo.get(i).length;j++){
+                        System.out.print("Peer " + (i + 1) + ": ");
+                        for(int j=0; j<fileOwnersInfo.get(i).length; j++){
                             System.out.print(fileOwnersInfo.get(i)[j]+ " ");
                         }
                         for (int j=0; j<fileOwnersStatistics.get(i).length; j++){
                             System.out.print(fileOwnersStatistics.get(i)[j]+ " ");
                         }
                         System.out.println();
-                        return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
-                        //alt+shift_insert poly grenn fn combo
                     }
+                    return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
             }
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -380,8 +379,8 @@ public class Peer {
             out.flush();
             // wait for response
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            String response = (String) in.readObject();
-            System.out.println(response + "\n");
+            int response = (int) in.readObject();
+            System.out.println("[+] Host is active.\n");
 
             out.close();
             in.close();
@@ -651,19 +650,29 @@ public class Peer {
     /**
      * Create a txt file, where we store the verified files that can be shared within the p2p network.
      */
-    private void createFileDownloadList(){
+    private void createFileDownloadList() {
         try {
-            String fileDownloadListDirectory = this.shared_directory + File.separator + "fileDownloadList.txt";
-            String[] fileDownloadListContent = {"file1.txt","file2.txt","file3.txt","file4.txt","file5.txt",};
-            FileWriter writer = new FileWriter(fileDownloadListDirectory);
+            // create or check if the file already exists in the direcotry
+            File fileDownloadList = new File(this.shared_directory + File.separator + "fileDownloadList.txt");
+            if (fileDownloadList.createNewFile()) {
+                System.out.println("File created: " + fileDownloadList);
+            } else {
+                System.out.println("fileDownloadList.txt found correctly at " + fileDownloadList);
+            }
+
+            // write the files
+            String[] fileDownloadListContent = {"file1.txt","file2.txt","file3.txt","file4.txt","file5.txt"};
+            FileWriter writer = new FileWriter(fileDownloadList);
             for (String files : fileDownloadListContent) {
                 writer.write(files);
                 writer.write(System.lineSeparator());
             }
+            writer.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
     /**
      * Check the files that are in the fileDownloadList.txt and in the shared directory.
      * @return matchingFiles - the common files from the txt and the directory.
