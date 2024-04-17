@@ -447,23 +447,20 @@ public class Peer {
             return;
         }
 
-        // sort the hashmap
+        // sort the array of peers
         ArrayList<Double> temp = new ArrayList<>();
-        HashMap<String[], Double> sortedQueue = new HashMap<>();
         for (Map.Entry<String[], Double> entry : queue.entrySet()) {
             temp.add(entry.getValue());
         }
         Collections.sort(temp);
+        ArrayList<String[]> sortedPeers = new ArrayList<>();
         for (double num : temp) {
             for (Map.Entry<String[], Double> entry : queue.entrySet()) {
                 if (entry.getValue().equals(num)) {
-                    sortedQueue.put(entry.getKey(), num);
+                    sortedPeers.add(entry.getKey());
                 }
             }
         }
-
-        ArrayList<String[]> sortedPeers = new ArrayList<>();
-        for (Map.Entry<String[], Double> entry : sortedQueue.entrySet()) sortedPeers.add(entry.getKey());
 
         // try to download from peer
         boolean downloaded = false;
