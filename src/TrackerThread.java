@@ -142,7 +142,7 @@ public class TrackerThread extends Thread{
         for(HashSet<Integer> fileOwners : allowedFiles.values()){
             fileOwners.remove(tokenID);
         }
-        Tracker.printMessage("Token: " + tokenID + " was removed from the system due to inactivity!");
+        Tracker.printMessage("Token: " + tokenID + " was removed from the system!");
     }
 
 
@@ -226,19 +226,14 @@ public class TrackerThread extends Thread{
         try {
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             int tokenID = in.readInt();
-            String[] loggedOutUserDetails = activeUsers.remove(tokenID);
-            if (loggedOutUserDetails != null) {
-                //removed from active users
-                Tracker.printMessage("User " + Arrays.toString(loggedOutUserDetails) + " with ID " + tokenID + " logged out successfully!");
-                out.writeInt(1);
-                out.flush();
-            }
-            else {
-                //token id does not exist (for some green fn reason)
-                Tracker.printMessage("User with ID " + tokenID + " failed to log out!");
-                out.writeInt(0);
-                out.flush();
-            }
+
+            //remove user from active users
+            removeTokenID(tokenID);
+            Tracker.printMessage("User with ID: " + tokenID + " logged out successfully!");
+
+            out.writeInt(1);
+            out.flush();
+
 
             //close all things related to the socket
             in.close();
