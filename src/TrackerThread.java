@@ -1,3 +1,6 @@
+import misc.Config;
+import misc.Function;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -114,17 +117,17 @@ public class TrackerThread extends Thread{
         try{
             Socket socket = new Socket(ip,port);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
             //write checkAlive code
-            out.writeInt(10);
+            out.writeInt(Function.CHECK_ACTIVE.getEncoded());
             out.flush();
 
             //await response of 1 for OK
-            int reply = in.readInt();
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            int reply = (int) in.readObject();
 
-            return reply == 1;
-        } catch (IOException e) {
+            return true;
+        } catch (IOException | ClassNotFoundException e) {
             return false;
         }
     }
@@ -170,6 +173,7 @@ public class TrackerThread extends Thread{
             }
             //user does not exist
             registeredUsers.putIfAbsent(username, password);
+            userCountStatistics.putIfAbsent(username, new int[2]);
             //register successful
             Tracker.printMessage("User " + username + " successfully registered!");
             out.writeInt(1);
@@ -268,7 +272,6 @@ public class TrackerThread extends Thread{
                 }
             }
 
-
             //Use the merge function to add the token id (if it is not there already) to the set of owners of the specific file, if such
             //registry does not exist, it creates the set of owners starting with this token id as the only one.
             for (String file : files){
@@ -286,8 +289,8 @@ public class TrackerThread extends Thread{
             //add to unfinished user details the complete information
             String[] userDetails = activeUsers.get(tokenID);
             userDetails[0] = peerIP; userDetails[1] = peerPort;
-            Tracker.printMessage("User's details obtained - " + Arrays.toString(activeUsers.get(tokenID)) + " ID: " + tokenID);
 
+            Tracker.printMessage("User's details obtained - " + Arrays.toString(activeUsers.get(tokenID)) + " ID: " + tokenID);
         }catch (IOException | ClassNotFoundException e){
             throw new RuntimeException(e);
         }
@@ -436,11 +439,8 @@ public class TrackerThread extends Thread{
             else{
                 //send code for success
                 out.writeInt(1);
-                out.flush();
-
                 //send file owners info
                 out.writeObject(fileOwnersInfo);
-                out.flush();
                 //send file owners statistics
                 out.writeObject(fileOwnersStatistics);
                 out.flush();

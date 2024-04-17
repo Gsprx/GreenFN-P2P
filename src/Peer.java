@@ -21,8 +21,8 @@ public class Peer {
     private String shared_directory;
     private int tokenID;
     private ArrayList<String> filesInNetwork;
-    ServerSocket peerServer;
-    boolean serverIsAlive;
+    boolean isPeerOnline;
+    ServerSocket server;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
@@ -30,6 +30,7 @@ public class Peer {
         this.shared_directory = shared_directory;
         this.createFileDownloadList();
         filesInNetwork = this.peersFilesInNetwork();
+        isPeerOnline = false;
     }
 
     /**
@@ -168,19 +169,22 @@ public class Peer {
         }
 
         if (response != 0) {
+            isPeerOnline = true;
             this.tokenID = response;
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {
-                    peerServer = new ServerSocket(this.port);
-                    this.serverIsAlive = true;
-                    while(serverIsAlive){
-                        Socket inConnection = peerServer.accept();
-                        Thread t = new PeerServerThread(inConnection, filesInNetwork,this.shared_directory);
+                    server = new ServerSocket(this.port);
+                    while(isPeerOnline) {
+                        Socket inConnection = server.accept();
+                        Thread t = new PeerServerThread(inConnection, filesInNetwork, this.shared_directory);
                         t.start();
                     }
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    // If the thread is currently listening for requests it will listen to a closed server socket
+                    // meaning we will get a socket closed exception
+                    // In that case we ignore the exception and the thread closes
+                    if (!e.getMessage().equals("Socket closed")) throw new RuntimeException(e);
                 }
             });
             runServer.start();
@@ -188,7 +192,7 @@ public class Peer {
             sendTrackerInformation(this.tokenID);
             runLoggedIn(this.tokenID);
         }
-        else System.out.println("[-] Wrong credentials");
+        else System.out.println("[-] Wrong credentials\n");
     }
 
     /**
@@ -258,6 +262,7 @@ public class Peer {
                 System.out.println("The available files are: ");
                 files.forEach(System.out::println);
             }
+            System.out.println();
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -294,6 +299,7 @@ public class Peer {
             out.flush();
             out.writeObject(filename);
             out.flush();
+
             ObjectInputStream in = new ObjectInputStream(tracker.getInputStream());
             int verificationCode = in.readInt();
             switch (verificationCode){
@@ -307,19 +313,28 @@ public class Peer {
                     System.out.println("File's details:");
                     ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
                     ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
+                    System.out.println("Peer\t|" + "IP\t\t\t\t|" + "Port\t|" + "Username\t\t\t\t|" + "Downloads\t\t|" + "Fails");
                     for(int i=0; i<fileOwnersInfo.size(); i++){
                         //Maybe write somewhere what are the values we see. Preferable before this for
-                        System.out.println("Peer "+i+": ");
-                        for(int j=0; j<fileOwnersInfo.get(i).length;j++){
-                            System.out.print(fileOwnersInfo.get(i)[j]+ " ");
+                        System.out.println("--------|---------------|-------|-----------------------|---------------|-------------------");
+                        System.out.print((i + 1) + "\t".repeat(2 - (Integer.toString((i + 1)).length() / 4)) + "|");
+                        for(int j=0; j<fileOwnersInfo.get(i).length; j++){
+                            if (j==0) // ip
+                                System.out.print(fileOwnersInfo.get(i)[j] + "\t".repeat(4 - (fileOwnersInfo.get(i)[j].length() / 4)) + "|");
+                            else if (j==1) // port
+                                System.out.print(fileOwnersInfo.get(i)[j] + "\t".repeat(2 - (fileOwnersInfo.get(i)[j].length() / 4)) + "|");
+                            else // username
+                                System.out.print(fileOwnersInfo.get(i)[j] + "\t".repeat(6 - (fileOwnersInfo.get(i)[j].length() / 4)) + "|");
                         }
                         for (int j=0; j<fileOwnersStatistics.get(i).length; j++){
-                            System.out.print(fileOwnersStatistics.get(i)[j]+ " ");
+                            if (j == 0) // downloads
+                                System.out.print(fileOwnersStatistics.get(i)[j] + "\t".repeat(4 - (Integer.toString(fileOwnersStatistics.get(i)[j]).length() / 4)) + "|");
+                            else // fails
+                                System.out.print(fileOwnersStatistics.get(i)[j]);
                         }
                         System.out.println();
-                        return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
-                        //alt+shift_insert poly grenn fn combo
                     }
+                    return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
             }
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -376,8 +391,8 @@ public class Peer {
             out.flush();
             // wait for response
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            String response = (String) in.readObject();
-            System.out.println(response + "\n");
+            int response = (int) in.readObject();
+            System.out.println("[+] Host is active.\n");
 
             out.close();
             in.close();
@@ -580,9 +595,10 @@ public class Peer {
         // wait for response (temp response string below)
         String Message;
         if(response==1){
+            // close the server socket
+            isPeerOnline = false;
             try {
-                peerServer.close();
-                this.serverIsAlive = false;
+                server.close();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -645,24 +661,34 @@ public class Peer {
     /**
      * Create a txt file, where we store the verified files that can be shared within the p2p network.
      */
-    private void createFileDownloadList(){
+    private void createFileDownloadList() {
         try {
-            String fileDownloadListDirectory = this.shared_directory + File.separator + "fileDownloadList.txt";
-            String[] fileDownloadListContent = {"file1.txt","file2.txt","file3.txt","file4.txt","file5.txt",};
-            FileWriter writer = new FileWriter(fileDownloadListDirectory);
+            // create or check if the file already exists in the direcotry
+            File fileDownloadList = new File(this.shared_directory + File.separator + "fileDownloadList.txt");
+            if (fileDownloadList.createNewFile()) {
+                System.out.println("File created: " + fileDownloadList);
+            } else {
+                System.out.println("fileDownloadList.txt found correctly at " + fileDownloadList);
+            }
+
+            // write the files
+            String[] fileDownloadListContent = {"file1.txt","file2.txt","file3.txt","file4.txt","file5.txt"};
+            FileWriter writer = new FileWriter(fileDownloadList);
             for (String files : fileDownloadListContent) {
                 writer.write(files);
                 writer.write(System.lineSeparator());
             }
+            writer.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
     /**
      * Check the files that are in the fileDownloadList.txt and in the shared directory.
      * @return matchingFiles - the common files from the txt and the directory.
      */
-    private ArrayList<String> peersFilesInNetwork(){
+    private ArrayList<String> peersFilesInNetwork() {
         try {
             //take the files from fileDownloadList
             List<String> filesInFileDownloadList = new ArrayList<>();
