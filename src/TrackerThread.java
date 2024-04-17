@@ -170,6 +170,7 @@ public class TrackerThread extends Thread{
             }
             //user does not exist
             registeredUsers.putIfAbsent(username, password);
+            userCountStatistics.putIfAbsent(username, new int[2]);
             //register successful
             Tracker.printMessage("User " + username + " successfully registered!");
             out.writeInt(1);
