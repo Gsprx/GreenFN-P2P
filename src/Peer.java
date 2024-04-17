@@ -21,6 +21,8 @@ public class Peer {
     private String shared_directory;
     private int tokenID;
     private ArrayList<String> filesInNetwork;
+    boolean isPeerOnline;
+    ServerSocket server;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
@@ -28,6 +30,7 @@ public class Peer {
         this.shared_directory = shared_directory;
         this.createFileDownloadList();
         filesInNetwork = this.peersFilesInNetwork();
+        isPeerOnline = false;
     }
 
     /**
@@ -166,18 +169,22 @@ public class Peer {
         }
 
         if (response != 0) {
+            isPeerOnline = true;
             this.tokenID = response;
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {
-                    ServerSocket server = new ServerSocket(this.port);
-                    while(true){
+                    server = new ServerSocket(this.port);
+                    while(isPeerOnline) {
                         Socket inConnection = server.accept();
-                        Thread t = new PeerServerThread(inConnection, filesInNetwork,this.shared_directory);
+                        Thread t = new PeerServerThread(inConnection, filesInNetwork, this.shared_directory);
                         t.start();
                     }
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    // If the thread is currently listening for requests it will listen to a closed server socket
+                    // meaning we will get a socket closed exception
+                    // In that case we ignore the exception and the thread closes
+                    if (!e.getMessage().equals("Socket closed")) throw new RuntimeException(e);
                 }
             });
             runServer.start();
@@ -185,7 +192,7 @@ public class Peer {
             sendTrackerInformation(this.tokenID);
             runLoggedIn(this.tokenID);
         }
-        else System.out.println("[-] Wrong credentials");
+        else System.out.println("[-] Wrong credentials\n");
     }
 
     /**
@@ -559,7 +566,6 @@ public class Peer {
      * Send request to tracker so the tracker can remove token_id of user
      */
     private void logout(int token) {
-        // TODO: Send logout request to tracker
         int response;
         try {
             Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -583,6 +589,14 @@ public class Peer {
             Message = "[-] You donkey kong can't even log out properly.\n";
         }
         System.out.println(Message);
+
+        // close the server socket
+        isPeerOnline = false;
+        try {
+            server.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -654,7 +668,7 @@ public class Peer {
      * Check the files that are in the fileDownloadList.txt and in the shared directory.
      * @return matchingFiles - the common files from the txt and the directory.
      */
-    private ArrayList<String> peersFilesInNetwork(){
+    private ArrayList<String> peersFilesInNetwork() {
         try {
             //take the files from fileDownloadList
             List<String> filesInFileDownloadList = new ArrayList<>();
