@@ -608,9 +608,9 @@ public class Peer {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.\n";
+            Message = "[+] You managed to logout successfully.\n";
         }else {
-            Message = "[-] You donkey kong can't even log out properly.\n";
+            Message = "[-] An error occurred during logout.\n";
         }
         System.out.println(Message);
     }

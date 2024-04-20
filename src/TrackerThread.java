@@ -274,7 +274,7 @@ public class TrackerThread extends Thread{
                     oldList.addAll(newList);
                     return oldList;
                 });
-                Tracker.printMessage("User with token ID: " + tokenID + " added a file to the allowed files - " + file);
+                Tracker.printMessage("User with token ID: " + tokenID + " added a file to the available files - " + file);
             }
 
             //obtain network information (IP, port)
@@ -398,7 +398,6 @@ public class TrackerThread extends Thread{
                 Tracker.printMessage("User with token: " + tokenID + " requested a file that does not exist - " + filename);
                 return;
             }
-
             //prepare reply lists
 
             //List with [IP,Port,Username]
@@ -423,7 +422,10 @@ public class TrackerThread extends Thread{
                     removeTokenID(ownerID);
                 }
             }
-
+            Tracker.printMessage("User with token: " + tokenID + " requested details for file - " + filename);
+            for (String[] owner:fileOwnersInfo){
+                Tracker.printMessage("Owner info sent: "+ Arrays.toString(owner));
+            }
 
             //send result to requester
             if(fileOwnersInfo.isEmpty() || fileOwnersStatistics.isEmpty()){
