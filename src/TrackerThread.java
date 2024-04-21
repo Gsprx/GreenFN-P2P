@@ -1,11 +1,9 @@
-import misc.Config;
 import misc.Function;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.time.temporal.TemporalAccessor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -16,7 +14,7 @@ public class TrackerThread extends Thread{
     private ConcurrentHashMap<String, String> registeredUsers;
     private ConcurrentHashMap<Integer,String[]> activeUsers;
     private ConcurrentHashMap<String, int[]> userCountStatistics;
-    private ConcurrentHashMap<String, HashSet<Integer>> allowedFiles;
+    private ConcurrentHashMap<String, HashSet<Integer>> availableFiles;
     private HashSet<String> allFiles;
 
     public TrackerThread(Socket connection, ConcurrentHashMap<String, String> registeredUsers, ConcurrentHashMap<Integer,String[]> activeUsers,
@@ -25,7 +23,7 @@ public class TrackerThread extends Thread{
         this.registeredUsers = registeredUsers;
         this.activeUsers = activeUsers;
         this.userCountStatistics = userCountStatistics;
-        this.allowedFiles = allowedFiles;
+        this.availableFiles = allowedFiles;
         this.allFiles = allFiles;
 
         try {
@@ -139,7 +137,7 @@ public class TrackerThread extends Thread{
         activeUsers.remove(tokenID);
 
         //remove the token from all files it exists as an owner in
-        for(HashSet<Integer> fileOwners : allowedFiles.values()){
+        for(HashSet<Integer> fileOwners : availableFiles.values()){
             fileOwners.remove(tokenID);
         }
         Tracker.printMessage("Token: " + tokenID + " was removed from the system!");
@@ -270,7 +268,7 @@ public class TrackerThread extends Thread{
             //Use the merge function to add the token id (if it is not there already) to the set of owners of the specific file, if such
             //registry does not exist, it creates the set of owners starting with this token id as the only one.
             for (String file : files){
-                allowedFiles.merge(file, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
+                availableFiles.merge(file, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
                     oldList.addAll(newList);
                     return oldList;
                 });
@@ -323,7 +321,7 @@ public class TrackerThread extends Thread{
             String senderUsername = (String) in.readObject();
 
             //add recipient to list of owners of the file
-            allowedFiles.merge(filename, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
+            availableFiles.merge(filename, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
                 oldList.addAll(newList);
                 return oldList;
             });
@@ -391,7 +389,7 @@ public class TrackerThread extends Thread{
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
 
             //requested file does not exist in the system
-            if(!allowedFiles.containsKey(filename)){
+            if(!availableFiles.containsKey(filename)){
                 //send code for fail (file does not exist)
                 out.writeInt(0);
                 out.flush();
@@ -407,7 +405,7 @@ public class TrackerThread extends Thread{
             ArrayList<int[]> fileOwnersStatistics = new ArrayList<>();
 
             //check all owners of requested file
-            HashSet<Integer> fileOwnerIDs = allowedFiles.get(filename);
+            HashSet<Integer> fileOwnerIDs = availableFiles.get(filename);
             for(int ownerID : fileOwnerIDs){
                 if(checkActive(ownerID)){
                     //get specific active owners info

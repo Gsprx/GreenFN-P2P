@@ -18,7 +18,7 @@ public class Tracker extends Thread{
     private ConcurrentHashMap<String, int[]> userCountStatistics;
 
     //Allowed files contains only the files in fileDownloadList.txt and the tokens of their owners
-    private ConcurrentHashMap<String, HashSet<Integer>> allowedFiles;
+    private ConcurrentHashMap<String, HashSet<Integer>> availableFiles;
 
     //Hashset will all available files
     private HashSet<String> allFiles;
@@ -28,7 +28,7 @@ public class Tracker extends Thread{
         registeredUsers = new ConcurrentHashMap<>();
         activeUsers = new ConcurrentHashMap<>();
         userCountStatistics = new ConcurrentHashMap<>();
-        allowedFiles = new ConcurrentHashMap<>();
+        availableFiles = new ConcurrentHashMap<>();
         allFiles = new HashSet<>();
     }
 
@@ -50,7 +50,7 @@ public class Tracker extends Thread{
             ServerSocket server = new ServerSocket(Config.TRACKER_PORT);
             while(true){
                 Socket inConnection = server.accept();
-                Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, allowedFiles, allFiles);
+                Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, availableFiles, allFiles);
                 t.start();
             }
 
