@@ -275,7 +275,7 @@ public class Peer {
      * @param filename The name of the file we want to look up.
      * @return A pair of the peers that own the files along with the statistics of each peer for the file.
      */
-    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename) {
+    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename)    {
         System.out.println("\n|Details|");
         //Input from peer - filename
         if (filename == null) {
