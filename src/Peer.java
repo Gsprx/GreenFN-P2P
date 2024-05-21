@@ -313,6 +313,8 @@ public class Peer {
                     System.out.println("File's details:");
                     ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
                     ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
+                    ArrayList<ArrayList<String>> fileOwnersPartitions = (ArrayList<ArrayList<String>>) in.readObject();
+                    ArrayList<Boolean> fileOwnersSeederBit = (ArrayList<Boolean>) in.readObject();
                     System.out.println("Peer\t|" + "IP\t\t\t\t|" + "Port\t|" + "Username\t\t\t\t|" + "Downloads\t\t|" + "Fails");
                     for(int i=0; i<fileOwnersInfo.size(); i++){
                         //Maybe write somewhere what are the values we see. Preferable before this for
@@ -331,6 +333,13 @@ public class Peer {
                                 System.out.print(fileOwnersStatistics.get(i)[j] + "\t".repeat(4 - (Integer.toString(fileOwnersStatistics.get(i)[j]).length() / 4)) + "|");
                             else // fails
                                 System.out.print(fileOwnersStatistics.get(i)[j]);
+                        }
+                        //Fix the following three for ui purposes
+                        for(int j=0; fileOwnersPartitions.get(i).size()>j; j++){
+                            System.out.print(fileOwnersPartitions.get(i).get(j));
+                        }
+                        for (Boolean seeder : fileOwnersSeederBit) {
+                            System.out.print(seeder);
                         }
                         System.out.println();
                     }
@@ -724,6 +733,80 @@ public class Peer {
             }
 
             return matchingFiles;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Split the file into multiple parts of size partLength
+     * */
+    private void splitFile(String fileName, int partLength){
+        String fileToSendName = this.shared_directory + File.separator+fileName;
+        String[] fileNameExtension = fileName. split("\\.");
+        System.out.println("fileNameExtension: " + Arrays.toString(fileNameExtension));
+        File fileToSplit = new File(fileToSendName);
+        try(FileInputStream fileInputStream = new FileInputStream(fileToSplit);
+            BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)){
+
+            byte[] filePartLength = new byte[partLength];
+            int bytesRead;
+            int partNumber = 1;
+
+            while ((bytesRead = bufferedInputStream.read(filePartLength)) > 0) {
+//                String pathToStorePart = String.format("%s-%d%s", fileBaseName, partNumber++, fileExtension);
+                String pathToStorePart = "%s%s%s-%s.%s".formatted(this.shared_directory, File.separator, fileNameExtension[0], String.valueOf(partNumber), fileNameExtension[1]);
+                partNumber++;
+                FileOutputStream fileOutputStream = new FileOutputStream(pathToStorePart);
+                // Delete existing data from the file
+                fileOutputStream.getChannel().truncate(0);
+                fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
+                //Open to write in the file
+                fileOutputStream = new FileOutputStream(pathToStorePart, true);
+                BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+                bufferedOutputStream.write(filePartLength, 0, bytesRead);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Assemble the separated parts of the file (fileName) into one.
+     * If there are not all the files in the shared_directory (partsNumber) nothing happens.
+     * Otherwise, create the file and store it into the shared_directory.
+     * */
+    private void assembleFile(String fileName, int partsNumber){
+        String[] fileNameExtension = fileName. split("\\.");
+        try {
+            String pathToStore = this.shared_directory + File.separator + fileName;
+            FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
+            // Delete existing data from the file
+            fileOutputStream.getChannel().truncate(0);
+            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
+            //Open to write in the file
+            fileOutputStream = new FileOutputStream(pathToStore, true);
+            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+
+            for (int partNumber = 1; partNumber <= partsNumber; partNumber++) {
+                String partFileName = "%s%s%s-%s.%s".formatted(this.shared_directory, File.separator, fileNameExtension[0], String.valueOf(partNumber), fileNameExtension[1]);
+                File partFile = new File(partFileName);
+
+                if (!partFile.exists()) {
+                    System.out.println("Not all parts are downloaded.");
+                    return;
+                }
+
+                try (BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(partFile))) {
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    while ((bytesRead = bufferedInputStream.read(buffer)) != -1) {
+                        bufferedOutputStream.write(buffer, 0, bytesRead);
+                    }
+                }
+            }
+
+            System.out.println("File assembly completed successfully.");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

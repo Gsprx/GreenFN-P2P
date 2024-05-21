@@ -152,9 +152,9 @@ public class TrackerThread extends Thread{
             }
         }
         //remove the token as a seeder from any file it exists in
-        for(HashSet<Integer> fileSeeders : fileSeeders.values()){
+        for(HashSet<Integer> seeders : fileSeeders.values()){
             synchronized (fileSeeders){
-                fileSeeders.remove(tokenID);
+                seeders.remove(tokenID);
             }
         }
         Tracker.printMessage("Token: " + tokenID + " was removed from the system!");
