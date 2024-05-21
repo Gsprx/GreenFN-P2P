@@ -47,7 +47,7 @@ public class Peer {
             do {
                 System.out.print("> ");
                 Scanner inp = new Scanner(System.in);
-                option = inp.nextLine().toLowerCase();
+                option = inp.nextLine().toLowerCase().trim();
                 if (option.equals("exit")) {
                     running = false;
                 }
@@ -85,11 +85,11 @@ public class Peer {
         // username
         System.out.print("Enter username: ");
         Scanner inp = new Scanner(System.in);
-        username = inp.nextLine();
+        username = inp.nextLine().trim();
         // password
         System.out.print("Enter password: ");
         inp = new Scanner(System.in);
-        password = inp.nextLine();
+        password = inp.nextLine().trim();
 
         int response;
         try {
@@ -136,11 +136,11 @@ public class Peer {
         // username
         System.out.print("Enter username: ");
         Scanner inp = new Scanner(System.in);
-        username = inp.nextLine();
+        username = inp.nextLine().trim();
         // password
         System.out.print("Enter password: ");
         inp = new Scanner(System.in);
-        password = inp.nextLine();
+        password = inp.nextLine().trim();
 
         int response;
         try {
@@ -209,7 +209,7 @@ public class Peer {
             do {
                 System.out.print("> ");
                 Scanner inp = new Scanner(System.in);
-                option = inp.nextLine().toLowerCase();
+                option = inp.nextLine().toLowerCase().trim();
                 if (!option.equals("1") && !option.equals("2") && !option.equals("3") && !option.equals("4") && !option.equals("5")) System.out.println("[-] Option \"" + option + "\" not found.");
             } while (!option.equals("1") && !option.equals("2") && !option.equals("3") && !option.equals("4") && !option.equals("5"));
 
@@ -275,13 +275,13 @@ public class Peer {
      * @param filename The name of the file we want to look up.
      * @return A pair of the peers that own the files along with the statistics of each peer for the file.
      */
-    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename) {
+    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename)    {
         System.out.println("\n|Details|");
         //Input from peer - filename
         if (filename == null) {
             System.out.print("Enter file name you want to look up (exit if don't want to loop up for anything): ");
             Scanner inp = new Scanner(System.in);
-            filename = inp.nextLine();
+            filename = inp.nextLine().trim();
             if(filename.equals("exit")) {
                 System.out.println("Exiting...\n");
                 return null;
@@ -334,6 +334,7 @@ public class Peer {
                         }
                         System.out.println();
                     }
+                    System.out.println();
                     return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
             }
         } catch (IOException | ClassNotFoundException e) {
@@ -364,7 +365,7 @@ public class Peer {
                 // get a string of the ip address
                 System.out.print("Enter peer ip address: ");
                 Scanner inp = new Scanner(System.in);
-                ip = inp.nextLine();
+                ip = inp.nextLine().trim();
                 // check if it is an ip address
                 is_ipv4 = TypeChecking.isIPv4(ip) || ip.equals("localhost");
             }
@@ -375,7 +376,7 @@ public class Peer {
                 // get a string of the port
                 System.out.print("Enter peer port: ");
                 Scanner inp = new Scanner(System.in);
-                String ans = inp.nextLine();
+                String ans = inp.nextLine().trim();
                 // check if answer is int
                 is_int = TypeChecking.isInteger(ans);
                 if (is_int) port = Integer.parseInt(ans);
@@ -411,10 +412,19 @@ public class Peer {
         System.out.println("\n|Download File|");
         System.out.print("File name: ");
         Scanner inp = new Scanner(System.in);
-        String fileName = inp.nextLine();
+        String fileName = inp.nextLine().trim();
         if(fileName.equals("exit")){
             System.out.println("Exiting...\n");
             return;
+        }
+        try {
+            List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
+            if(filesInSharedDirectory.contains(fileName)){
+                System.out.println("You already have this file in your shared directory <3\n");
+                return;
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
         // get the details of the file the peer wants to download
         Map.Entry<ArrayList<String[]>, ArrayList<int[]>> detailsResult = details(fileName);
@@ -429,7 +439,8 @@ public class Peer {
         HashMap<String[], Double> queue = new HashMap<>();
         for (int i=0; i<fileOwnersInfo.size(); i++) {
             // if peer is active add him and his statistics to the candidate list
-            if (checkActive(fileOwnersInfo.get(i)[0], Integer.parseInt(fileOwnersInfo.get(i)[0]))) {
+            System.out.println("Checking if host " + fileOwnersInfo.get(i)[2] + " is active...");
+            if (checkActive(fileOwnersInfo.get(i)[0], Integer.parseInt(fileOwnersInfo.get(i)[1]))) {
                 // add the peer to a candidate list
                 activeFileOwners.add(fileOwnersInfo.get(i));
                 // add his statistics to a candidate list
@@ -445,24 +456,20 @@ public class Peer {
             return;
         }
 
-        // sort the hashmap
+        // sort the array of peers
         ArrayList<Double> temp = new ArrayList<>();
-        HashMap<String[], Double> sortedQueue = new HashMap<>();
         for (Map.Entry<String[], Double> entry : queue.entrySet()) {
             temp.add(entry.getValue());
         }
         Collections.sort(temp);
+        ArrayList<String[]> sortedPeers = new ArrayList<>();
         for (double num : temp) {
             for (Map.Entry<String[], Double> entry : queue.entrySet()) {
                 if (entry.getValue().equals(num)) {
-                    sortedQueue.put(entry.getKey(), num);
+                    sortedPeers.add(entry.getKey());
                 }
             }
         }
-
-        System.out.println("\n========================" + sortedQueue + "========================\n");
-        ArrayList<String[]> sortedPeers = new ArrayList<>();
-        for (Map.Entry<String[], Double> entry : sortedQueue.entrySet()) sortedPeers.add(entry.getKey());
 
         // try to download from peer
         boolean downloaded = false;
@@ -474,7 +481,7 @@ public class Peer {
             }
 
             // get the first from the candidate list
-            String[] currentPeer = sortedPeers.get(0);
+            String[] currentPeer = sortedPeers.remove(0);
 
             // try to establish connection with peer
             try {
@@ -492,11 +499,10 @@ public class Peer {
                 // result 0 = file does not exist
                 if (result == 0) {
                     System.out.println("This file does not exist...");
-                    return;
                 }
                 // result 1 = file exists
                 else {
-                    String pathToStore = this.shared_directory+ File.separator+fileName;
+                    String pathToStore = this.shared_directory + File.separator + fileName;
                     FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
                     // Delete existing data from the file
                     fileOutputStream.getChannel().truncate(0);
@@ -505,7 +511,7 @@ public class Peer {
                     fileOutputStream = new FileOutputStream(pathToStore, true);
                     BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
                     //read file parts to be received
-                    Double fileParts = in.readDouble();
+                    int fileParts = in.readInt();
                     byte[] fileBytes;
                     for (int i=0; i<fileParts; i++){
                         fileBytes = new byte[Config.DOWNLOAD_SIZE];
@@ -516,6 +522,7 @@ public class Peer {
                         }
                         bufferedOutputStream.flush();
                     }
+                    bufferedOutputStream.close();
                     // close
                     out.close();
                     in.close();
@@ -528,10 +535,9 @@ public class Peer {
                 }
             } catch (IOException e) {
                 System.out.println("Something went wrong...Could not download file from peer.");
+                e.printStackTrace();
                 // inform tracker for failed download
                 notifyTracker(0, currentPeer, fileName);
-                // remove failed download peer
-                sortedPeers.remove(0);
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
@@ -602,9 +608,9 @@ public class Peer {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            Message = "[+] Your smelly ass has managed to logout, don't show up here never again or you'll be smoked on ma mama.\n";
+            Message = "[+] You managed to logout successfully.\n";
         }else {
-            Message = "[-] You donkey kong can't even log out properly.\n";
+            Message = "[-] An error occurred during logout.\n";
         }
         System.out.println(Message);
     }
@@ -672,7 +678,7 @@ public class Peer {
             }
 
             // write the files
-            String[] fileDownloadListContent = {"file1.txt","file2.txt","file3.txt","file4.txt","file5.txt"};
+            String[] fileDownloadListContent = Config.fileDownloadList;
             FileWriter writer = new FileWriter(fileDownloadList);
             for (String files : fileDownloadListContent) {
                 writer.write(files);
