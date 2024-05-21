@@ -1,5 +1,4 @@
 import misc.Function;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -14,17 +13,22 @@ public class TrackerThread extends Thread{
     private ConcurrentHashMap<String, String> registeredUsers;
     private ConcurrentHashMap<Integer,String[]> activeUsers;
     private ConcurrentHashMap<String, int[]> userCountStatistics;
-    private ConcurrentHashMap<String, HashSet<Integer>> availableFiles;
+    private ConcurrentHashMap<String, HashSet<Integer>> availablePartitions;
     private HashSet<String> allFiles;
+    private ConcurrentHashMap<String, HashSet<String>> allFilePartitions;
+    private ConcurrentHashMap<String, HashSet<Integer>> fileSeeders;
 
     public TrackerThread(Socket connection, ConcurrentHashMap<String, String> registeredUsers, ConcurrentHashMap<Integer,String[]> activeUsers,
-                         ConcurrentHashMap<String, int[]> userCountStatistics, ConcurrentHashMap<String, HashSet<Integer>> allowedFiles, HashSet<String> allFiles) {
+                         ConcurrentHashMap<String, int[]> userCountStatistics, ConcurrentHashMap<String, HashSet<Integer>> availablePartitions, HashSet<String> allFiles,
+                         ConcurrentHashMap<String, HashSet<String>> allFilePartitions, ConcurrentHashMap<String, HashSet<Integer>> fileSeeders) {
         this.connection = connection;
         this.registeredUsers = registeredUsers;
         this.activeUsers = activeUsers;
         this.userCountStatistics = userCountStatistics;
-        this.availableFiles = allowedFiles;
+        this.availablePartitions = availablePartitions;
         this.allFiles = allFiles;
+        this.allFilePartitions = allFilePartitions;
+        this.fileSeeders = fileSeeders;
 
         try {
             in = new ObjectInputStream(connection.getInputStream());
@@ -70,6 +74,9 @@ public class TrackerThread extends Thread{
                 case 7:{
                     replyDetails();
                     break;
+                }
+                case 11:{
+                    seederInform();
                 }
 
             }//switch
@@ -123,7 +130,8 @@ public class TrackerThread extends Thread{
             //await response of 1 for OK
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             int reply = (int) in.readObject();
-
+            Tracker.printMessage("Peer with ip:" + ip + " was confirmed to be active.");
+            socket.close();
             return true;
         } catch (IOException | ClassNotFoundException e) {
             return false;
@@ -136,9 +144,17 @@ public class TrackerThread extends Thread{
         //remove the token from active users log
         activeUsers.remove(tokenID);
 
-        //remove the token from all files it exists as an owner in
-        for(HashSet<Integer> fileOwners : availableFiles.values()){
-            fileOwners.remove(tokenID);
+        //remove the token from all file partitions it exists as an owner in
+        for(HashSet<Integer> filePartOwners : availablePartitions.values()){
+            synchronized (filePartOwners){
+                filePartOwners.remove(tokenID);
+            }
+        }
+        //remove the token as a seeder from any file it exists in
+        for(HashSet<Integer> fileSeeders : fileSeeders.values()){
+            synchronized (fileSeeders){
+                fileSeeders.remove(tokenID);
+            }
         }
         Tracker.printMessage("Token: " + tokenID + " was removed from the system!");
     }
@@ -243,7 +259,7 @@ public class TrackerThread extends Thread{
     }
 
     //code = 4
-    //expected input is int token id, ArrayList<String> filenames and communication details
+    //expected input is int token id, ArrayList<String> filenames, ArrayList<HashSet<String>> partitions and communication details
     private void peerInform(){
         try{
             //check if token id is valid
@@ -253,10 +269,12 @@ public class TrackerThread extends Thread{
                 Tracker.printMessage("User with token ID: " + tokenID + " attempted to inform but token was invalid!");
                 return;
             }
+
+
             //obtain files and add them to trackers data
             ArrayList<String> files = (ArrayList<String>) in.readObject();
 
-            //Add new files to allFiles if they do not already exist
+            //add new files to allFiles if they do not already exist
             synchronized (allFiles){
                 for(String file : files){
                     if (allFiles.add(file)){
@@ -265,15 +283,36 @@ public class TrackerThread extends Thread{
                 }
             }
 
-            //Use the merge function to add the token id (if it is not there already) to the set of owners of the specific file, if such
-            //registry does not exist, it creates the set of owners starting with this token id as the only one.
-            for (String file : files){
-                availableFiles.merge(file, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
-                    oldList.addAll(newList);
-                    return oldList;
-                });
-                Tracker.printMessage("User with token ID: " + tokenID + " added a file to the allowed files - " + file);
+
+            //obtain files' partitions and add them to tracker data for each file
+            ArrayList<HashSet<String>> filesPartitions = (ArrayList<HashSet<String>>) in.readObject();
+
+            synchronized (allFilePartitions) {
+                for (int i = 0; i< files.size(); i++){
+                    String fileName = files.get(i);
+                    HashSet<String> filePartitions = filesPartitions.get(i);
+                    if(!allFilePartitions.containsKey(fileName)){
+                        allFilePartitions.put(fileName, filePartitions);
+                        Tracker.printMessage("User with token ID: " + tokenID + " added a file partition to all files partitions - " + filePartitions);
+                    }
+                    else{
+                        allFilePartitions.get(fileName).addAll(filePartitions);
+                        Tracker.printMessage("User with token ID: " + tokenID + " added a file partition to all files partitions - " + filePartitions);
+                    }
+                }
             }
+
+            //use the merge function to add the token id (if it is not there already) to the set of owners of the specific file partition, if such
+            //registry does not exist, it creates the set of owners starting with this token id as the only one.
+            for (HashSet<String> filePartitions : filesPartitions) {
+                for (String partition : filePartitions) {
+                    availablePartitions.merge(partition, new  HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
+                        oldList.addAll(newList);
+                        return oldList;
+                    });
+                }
+            }
+
 
             //obtain network information (IP, port)
             String peerIP = (String) in.readObject();
@@ -310,25 +349,25 @@ public class TrackerThread extends Thread{
     }
 
     //5 -> code = 1
-    //expected input is int tokenID. String filename, String senderUsername
+    //expected input is int tokenID. String partition, String senderUsername
     private void peerNotifySuccess(){
         try {
             //identify recipient
             int tokenID = in.readInt();
             //identify file received
-            String filename = (String) in.readObject();
+            String filePartition = (String) in.readObject();
             //identify username of sender
             String senderUsername = (String) in.readObject();
 
-            //add recipient to list of owners of the file
-            availableFiles.merge(filename, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
+            //add recipient to list of owners of the file using the merge function
+            availablePartitions.merge(filePartition, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
                 oldList.addAll(newList);
                 return oldList;
             });
 
             //increase count download for sender
             userCountStatistics.get(senderUsername)[0]++;
-            Tracker.printMessage("User with token : " + tokenID + " notified the tracker of a successful download from user: " + senderUsername + " for the file: " + filename);
+            Tracker.printMessage("User with token : " + tokenID + " notified the tracker of a successful download from user: " + senderUsername + " for the file partition: " + filePartition);
 
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -382,18 +421,18 @@ public class TrackerThread extends Thread{
     private void replyDetails(){
         try {
             //identify requester
-            int tokenID = in.readInt();
+            int requesterTokenID = in.readInt();
             //get file name
             String filename = (String) in.readObject();
 
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
 
             //requested file does not exist in the system
-            if(!availableFiles.containsKey(filename)){
+            if(!allFiles.contains(filename)){
                 //send code for fail (file does not exist)
                 out.writeInt(0);
                 out.flush();
-                Tracker.printMessage("User with token: " + tokenID + " requested a file that does not exist - " + filename);
+                Tracker.printMessage("User with token: " + requesterTokenID + " requested a file that does not exist in the system - " + filename);
                 return;
             }
 
@@ -401,26 +440,55 @@ public class TrackerThread extends Thread{
 
             //List with [IP,Port,Username]
             ArrayList<String[]> fileOwnersInfo = new ArrayList<>();
+
             //List with [CountDownload, CountFail]
             ArrayList<int[]> fileOwnersStatistics = new ArrayList<>();
 
-            //check all owners of requested file
-            HashSet<Integer> fileOwnerIDs = availableFiles.get(filename);
-            for(int ownerID : fileOwnerIDs){
-                if(checkActive(ownerID)){
-                    //get specific active owners info
-                    String[] activeOwnerInfo = activeUsers.get(ownerID);
+            //List with [{filePartitions}]
+            ArrayList<ArrayList<String>> fileOwnersPartitions = new ArrayList<>();
+
+            //List with [SeederBoolean/Bit]
+            ArrayList<Boolean> fileOwnersSeederBit = new ArrayList<>();
+
+
+
+            //collect all token ids from file's partition owners
+            HashSet<Integer> fileOwnerIDs = new HashSet<>();
+
+            //scan all partitions recorded, only add owners on availablePartitions list
+            for(String partition : allFilePartitions.get(filename)){
+                fileOwnerIDs.addAll(availablePartitions.get(partition));
+            }
+
+            //fill reply lists
+            for(int token: fileOwnerIDs){
+                if(checkActive(token)){
+                    //get specific active owner's info
+                    String[] activeOwnerInfo = activeUsers.get(token);
                     String ownerUsername = activeOwnerInfo[2];
 
-                    //add owners info and statistics to reply list
+                    //add owner's info and statistics to reply list
                     fileOwnersInfo.add(activeOwnerInfo);
                     fileOwnersStatistics.add(userCountStatistics.get(ownerUsername));
+
+                    //get owner's partitions for this file
+                    ArrayList<String> partitions = new ArrayList<>();
+                    for(String partition : allFilePartitions.get(filename)){
+                        if(availablePartitions.get(partition).contains(token)){
+                            partitions.add(partition);
+                        }
+                    }
+                    //add owner's file partitions
+                    fileOwnersPartitions.add(partitions);
+                    //add owner's seeder status
+                    fileOwnersSeederBit.add(fileSeeders.get(filename).contains(token));
                 }
-                //remove inactive tokens from the system
-                else {
-                    removeTokenID(ownerID);
+                else{
+                    removeTokenID(token);
                 }
             }
+
+
 
 
             //send result to requester
@@ -436,6 +504,10 @@ public class TrackerThread extends Thread{
                 out.writeObject(fileOwnersInfo);
                 //send file owners statistics
                 out.writeObject(fileOwnersStatistics);
+                //send file owners partitions
+                out.writeObject(fileOwnersPartitions);
+                //send file owners seeder status
+                out.writeObject(fileOwnersSeederBit);
                 out.flush();
             }
 
@@ -443,6 +515,49 @@ public class TrackerThread extends Thread{
             Tracker.printMessage("Error! " + e.getMessage());
         }
 
+    }
+    //code = 11
+    //expected input is token id, String filename and HashSet<String> fileParts
+    private void seederInform(){
+        try {
+            //identify seeder
+            int tokenID = in.readInt();
+
+            if(!activeUsers.containsKey(tokenID)){
+                //invalid token, reject call and return
+                Tracker.printMessage("User with token ID: " + tokenID + " attempted to seeder-inform but token was invalid!");
+                return;
+            }
+
+            //obtain file name and file partitions from seeder
+            String filename = (String) in.readObject();
+            HashSet<String> filePartitions = (HashSet<String>) in.readObject();
+
+            //update tracker's relevant data structures
+
+            //add token id to this file's seeders list
+            fileSeeders.merge(filename, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
+                oldList.addAll(newList);
+                return oldList;
+            });
+
+            //add file partitions to this file's partition list
+            allFilePartitions.merge(filename, new HashSet<>(){{addAll(filePartitions);}}, (oldList, newList) -> {
+                oldList.addAll(newList);
+                return oldList;
+            });
+
+            //add token id to available file partition owners
+            for (String filePartition : filePartitions){
+                availablePartitions.merge(filePartition, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
+                    oldList.addAll(newList);
+                    return oldList;
+                });
+            }
+
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }

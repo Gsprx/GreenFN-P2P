@@ -17,19 +17,31 @@ public class Tracker extends Thread{
     //User count statistics consists of (Username, [countDownload,countFail])
     private ConcurrentHashMap<String, int[]> userCountStatistics;
 
-    //Allowed files contains only the files in fileDownloadList.txt and the tokens of their owners
-    private ConcurrentHashMap<String, HashSet<Integer>> availableFiles;
 
-    //Hashset will all available files
+//                          Unused as of part 2 of project.
+//    Allowed files contains only the files in fileDownloadList.txt and the tokens of their owners
+//    private ConcurrentHashMap<String, HashSet<Integer>> availableFiles;
+
+    //Hashset with all recorded files
     private HashSet<String> allFiles;
 
+    //Map of all partitions recorded for each file (FileName, {partNum1,partNum2, ...})
+    private ConcurrentHashMap<String, HashSet<String>> allFilePartitions;
+
+    //Map of all owners of each file partition (filePart, {ownerID1 ,ownerID2 ...})
+    private ConcurrentHashMap<String, HashSet<Integer>> availablePartitions;
+
+    //Map of all seeders for each file in the system
+    private ConcurrentHashMap<String,HashSet<Integer>> fileSeeders;
 
     public Tracker(){
         registeredUsers = new ConcurrentHashMap<>();
         activeUsers = new ConcurrentHashMap<>();
         userCountStatistics = new ConcurrentHashMap<>();
-        availableFiles = new ConcurrentHashMap<>();
+        availablePartitions = new ConcurrentHashMap<>();
         allFiles = new HashSet<>();
+        allFilePartitions = new ConcurrentHashMap<>();
+        fileSeeders = new ConcurrentHashMap<>();
     }
 
     public static void main(String[] args) {
@@ -50,7 +62,7 @@ public class Tracker extends Thread{
             ServerSocket server = new ServerSocket(Config.TRACKER_PORT);
             while(true){
                 Socket inConnection = server.accept();
-                Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, availableFiles, allFiles);
+                Thread t = new TrackerThread(inConnection,registeredUsers,activeUsers,userCountStatistics, availablePartitions, allFiles, allFilePartitions, fileSeeders);
                 t.start();
             }
 

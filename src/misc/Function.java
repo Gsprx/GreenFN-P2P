@@ -61,6 +61,13 @@ public enum Function {
         public int getEncoded() {
             return 10;
         }
+    },
+
+    SEEDER_INFORM{
+        @Override
+        public int getEncoded() {
+            return 11;
+        }
     };
 
     public abstract int getEncoded();
