@@ -45,6 +45,7 @@ public class Peer {
         this.port = port;
         this.shared_directory = shared_directory;
         createFileDownloadList();
+        //Here we may have to partition the completed files
         this.filesInNetwork = peersFilesInNetwork();
         this.partitionsInNetwork = peersPartitionsInNetwork();
         this.seederOfFiles = seederOfFilesInNetwork();
@@ -935,6 +936,48 @@ public class Peer {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Look in the fileDownloadList and the shared_directory
+     * @return a random file from fileDownloadList that is not in the shared_directory- or Empty string if you have all the files
+     * */
+    protected String select(){
+        String selectedFile = "";
+        try {
+            //Files in fileDownloadList
+            List<String> filesInFileDownloadList = new ArrayList<>();
+            BufferedReader reader = new BufferedReader(new FileReader(this.shared_directory + File.separator + "fileDownloadList.txt"));
+            String downloadableFile;
+            while ((downloadableFile = reader.readLine()) != null) {
+                // Add each line to the list
+                filesInFileDownloadList.add(new String(downloadableFile));
+            }
+            System.out.println("filesInFileDownloadList");
+            filesInFileDownloadList.stream().forEach(System.out::println);
+            //Files in sharedDirectory
+            List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
+            System.out.println("filesInSharedDirectory");
+            filesInSharedDirectory.stream().forEach(System.out::println);
+            //Get the non conflicted
+            ArrayList<String> nonMatchingFiles = new ArrayList<>();
+            for(String file : filesInFileDownloadList){
+                if(!filesInSharedDirectory.contains(file)){
+                    nonMatchingFiles.add(file);
+                }
+            }
+            System.out.println("nonMatchingFiles");
+            nonMatchingFiles.stream().forEach(System.out::println);
+            //Pick a random of those
+            if (!nonMatchingFiles.isEmpty()) {
+                Random random = new Random();
+                selectedFile = nonMatchingFiles.get(random.nextInt(nonMatchingFiles.size()));
+            }
+            //return it or empty
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return selectedFile;
     }
 
     public static void main(String[] args) {

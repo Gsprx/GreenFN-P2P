@@ -2,9 +2,7 @@ import misc.Config;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -19,6 +17,7 @@ public class PeerServerThread extends Thread {
     private HashMap<String, String> threadByFile;
     // Map of partitions each peer requested and the thread that works on serving them, (#12ae23, [peer1, {file1-1.txt, file1-3.txt}])
     private HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread;
+    private HashMap<String, HashMap<Socket, ArrayList<String>>> peerPartitionsByThread2;
     // Locks the threadByFile and peerPartitionsByThread
     private ReentrantLock lock;
 
@@ -146,15 +145,81 @@ public class PeerServerThread extends Thread {
             if (!this.threadByFile.containsKey(fileName)) {
                 this.threadByFile.put(fileName, threadName);
                 this.peerPartitionsByThread.put(threadName, partitionsReqByPeer);
+
+                //Testing
+                HashMap<Socket, ArrayList<String>> innerMap = new HashMap<>();
+                for (String key : partitionsReqByPeer.keySet()) {
+                    innerMap.put(this.connection, partitionsReqByPeer.get(key));
+                }
+                peerPartitionsByThread2.put(threadName, innerMap);
+                //Testing-end
+
                 lock.unlock();
-                TimeUnit.SECONDS.sleep(2);
+                TimeUnit.MILLISECONDS.sleep(200);
+                lock.lock();
+                this.threadByFile.remove(fileName);
+                HashMap<String, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.remove(threadName);
+                //Testing
+                HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer2 = this.peerPartitionsByThread2.remove(threadName);
+                //Testing-end
+                lock.unlock();
+                //Random initialize
+                Random rand = new Random();
+                //Convert involvedPeers to a list
+                List<String> involvedPeers = new ArrayList<>(partitionsRequestsPerPeer.keySet());
+                //Select a random peer
+                String selectedPeer = involvedPeers.get(rand.nextInt(involvedPeers.size()));
+                //Retrieve the ArrayList of file partitions requested of the random peer
+                ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(selectedPeer);
+                //Select a random partition from the ArrayList
+                String selectedPartition = requestedPartitions.get(rand.nextInt(requestedPartitions.size()));
+
+                //Testing
+                //Convert involvedPeers to a list
+                List<Socket> involvedPeers2 = new ArrayList<>(partitionsRequestsPerPeer2.keySet());
+                //Select a random peer
+                Socket selectedPeer2 = involvedPeers2.get(rand.nextInt(involvedPeers.size()));
+                //Retrieve the ArrayList of file partitions requested of the random peer
+                ArrayList<String> requestedPartitions2 = partitionsRequestsPerPeer2.get(selectedPeer2);
+                //Select a random partition from the ArrayList
+                String selectedPart2 = requestedPartitions2.get(rand.nextInt(requestedPartitions2.size()));
+                //Get outputStream
+                ObjectOutputStream outputStream = new ObjectOutputStream(selectedPeer2.getOutputStream());
+                //The codes can be changed to fit the method in the Peer!!!!!!!!!!!!!!!!!!!
+                //Send "OK" code - this can be removed
+                outputStream.writeObject("OK");
+                outputStream.flush();
+                //Send the selected part
+                outputStream.writeObject(selectedPart2);
+                outputStream.flush();
+                //Send "DENIED" to the rest
+                involvedPeers2.remove(selectedPeer2);
+                for(Socket socket : involvedPeers2){
+                    outputStream = new ObjectOutputStream(socket.getOutputStream());
+                    outputStream.writeObject("DENIED");
+                    outputStream.flush();
+                }
+                //Testing-end
+
             } else {
                 String initThread = this.threadByFile.get(fileName);
                 HashMap<String, ArrayList<String>> newPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+
+                //Testing
+                HashMap<Socket, ArrayList<String>> newPeerPartitionsReq2 = this.peerPartitionsByThread2.get(initThread);
+                HashMap<Socket, ArrayList<String>> innerMap = new HashMap<>();
+                for (String key : partitionsReqByPeer.keySet()) {
+                    innerMap.put(this.connection, partitionsReqByPeer.get(key));
+                }
+                newPeerPartitionsReq2.putAll(innerMap);
+                this.peerPartitionsByThread2.put(initThread,newPeerPartitionsReq2);
+                //Testing-end
+
                 newPeerPartitionsReq.putAll(partitionsReqByPeer);
                 this.peerPartitionsByThread.put(initThread, newPeerPartitionsReq);
                 lock.unlock();
             }
+            return;
         } catch (IOException | ClassNotFoundException | InterruptedException e) {
             throw new RuntimeException(e);
         }
