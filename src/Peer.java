@@ -3,6 +3,7 @@ import misc.Function;
 import misc.TypeChecking;
 
 import java.io.*;
+import java.lang.reflect.Array;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -20,17 +21,28 @@ public class Peer {
     private int port;
     private String shared_directory;
     private int tokenID;
+    // the files in the peer's network that he has either completely or partially (partitions of them)
     private ArrayList<String> filesInNetwork;
+    // the partitions for each of the files. Every hashset in the arraylist corresponds to the file at the same index
+    // in filesInNetwork
+    private ArrayList<HashSet<String>> partitionsInNetwork;
+    // the files fow which this peer is a seeder
+    private ArrayList<String> seederOfFiles;
     boolean isPeerOnline;
     ServerSocket server;
+
+    private boolean isSeeder;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
         this.port = port;
         this.shared_directory = shared_directory;
-        this.createFileDownloadList();
-        filesInNetwork = this.peersFilesInNetwork();
-        isPeerOnline = false;
+        createFileDownloadList();
+        this.filesInNetwork = peersFilesInNetwork();
+        this.partitionsInNetwork = peersPartitionsInNetwork();
+        this.seederOfFiles = seederOfFilesInNetwork();
+        this.isSeeder = this.seederOfFiles.size() > 0;
+        this.isPeerOnline = false;
     }
 
     /**
@@ -177,7 +189,7 @@ public class Peer {
                     server = new ServerSocket(this.port);
                     while(isPeerOnline) {
                         Socket inConnection = server.accept();
-                        Thread t = new PeerServerThread(inConnection, filesInNetwork, this.shared_directory);
+                        Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork, this.seederOfFiles, this.shared_directory);
                         t.start();
                     }
                 } catch (IOException e) {
@@ -190,6 +202,7 @@ public class Peer {
             runServer.start();
 
             sendTrackerInformation(this.tokenID);
+            sendTrackerInformationAsSeeder(this.tokenID);
             runLoggedIn(this.tokenID);
         }
         else System.out.println("[-] Wrong credentials\n");
@@ -628,6 +641,7 @@ public class Peer {
      * Send Tracker Information
      * This method is called after user log in to update tracker about the peer's information.
      * Send tokenID, files(Name because its unique), peerIP, peerPort to tracker so the tracker can store them.
+     * @param token The tokenID of the peer assigned by the tracker.
      */
     private void sendTrackerInformation(int token) {
         try {
@@ -642,12 +656,46 @@ public class Peer {
             //Send files
             out.writeObject(filesInNetwork);
             out.flush();
+            //Send partitions
+            out.writeObject(partitionsInNetwork);
+            out.flush();
             //Send peerIP
             out.writeObject(this.ip);
             out.flush();
             //Send peerPort
             out.writeObject(Integer.toString(this.port));
             out.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Send Tracker Information
+     * This method is called after user log in to update tracker about the seeder's information.
+     * Send tokenID, files(Name because its unique) and for each file all of its parts in a hashset.
+     * @param token The tokenID of the peer assigned by the tracker.
+     */
+    private void sendTrackerInformationAsSeeder(int token) {
+        if (!this.isSeeder) return;
+        try {
+            for (String file : seederOfFiles) {
+                Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                //Send register code
+                out.writeInt(Function.SEEDER_INFORM.getEncoded());
+                out.flush();
+                //Send tokenID
+                out.writeInt(token);
+                out.flush();
+                //Send fileName
+                out.writeObject(file);
+                out.flush();
+                //Send all the file parts
+                int indexOfHashSet = this.filesInNetwork.indexOf(file);
+                out.writeObject(this.partitionsInNetwork.get(indexOfHashSet));
+                out.flush();
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -717,22 +765,88 @@ public class Peer {
             //take the files that are in your directory
             List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
 
-            /*
-            For debugging purposes
-            System.out.println("Files: "+filesInSharedDirectory);
-            System.out.println("Class: "+filesInSharedDirectory.getClass());
-            filesInSharedDirectory.stream().forEach(System.out::println);
-            */
-
             //save the common files - return
+            // even if we don't have the full file and only own partitions of it we still add it to the data structure
+            // how we do that is iterating through the fileDownloadList and for every file in there, if we find a file
+            // in the shared directory which contains the name of the fileDownloadList file we add it.
             ArrayList<String> matchingFiles = new ArrayList<>();
-            for(String file : filesInFileDownloadList){
-                if(filesInSharedDirectory.contains(file)){
-                    matchingFiles.add(new String(file));
+            for(String file : filesInFileDownloadList) {
+                // however we need to do a little trimming because of the extensions of the files.
+                // ex. The value of file is file5.txt and in our shared directory we have file5-1.txt and file5-3.txt.
+                // file5.txt is not contained in either of those two files we own (because of the .txt extension).
+                // So we cut the .txt part, now file is just file5 and is contained in file5-1.txt for example, so
+                // we know we want to add file5.txt. WARNING: FILES WITH '.' CHARACTER IN THEIR NAME WILL BE PROBLEMATIC.
+                String fileTrimmed = file.substring(0, file.indexOf("."));
+                for (String dirFile : filesInSharedDirectory) {
+                    if (dirFile.contains(fileTrimmed)) {
+                        matchingFiles.add(file);
+                        break;
+                    }
                 }
             }
-
             return matchingFiles;
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Get each partition for every file of the filesInNetwork list.
+     * @return An array of hashsets, each corresponding to the file at the same index of the array filesInNetwork.
+     */
+    private ArrayList<HashSet<String>> peersPartitionsInNetwork() {
+        try {
+            ArrayList<HashSet<String>> partitionsOfAllFiles = new ArrayList<>();
+
+            //take the files that are in your directory
+            List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
+
+            for (int i=0; i<this.filesInNetwork.size(); i++) {
+                HashSet<String> partitionsOfFile = new HashSet<>();
+                String file = this.filesInNetwork.get(i);
+                // trim the file's extension
+                String fileTrimmed = file.substring(0, file.indexOf("."));
+                // Iterate through all the files in the shared directory. If it contains fileTrimmed and is not the same as fileTrimmed
+                // (meaning it is the whole file) then add to the hashset.
+                for (String dirFile : filesInSharedDirectory) {
+                    String dirFileTrimmed = dirFile.substring(0, dirFile.indexOf("."));
+                    if (!dirFileTrimmed.equals(fileTrimmed) && dirFileTrimmed.contains(fileTrimmed)) {
+                        partitionsOfFile.add(dirFile);
+                    }
+                }
+                partitionsOfAllFiles.add(partitionsOfFile);
+            }
+            return partitionsOfAllFiles;
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Get all the files this peer is seeding.
+     * @return An array of all the file names this peer is seeding
+     */
+    private ArrayList<String> seederOfFilesInNetwork() {
+        try {
+            ArrayList<String> seedingFiles = new ArrayList<>();
+
+            //take the files that are in your directory
+            List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
+
+            for (String fileInNetwork : this.filesInNetwork) {
+                String fileInNetworkTrimmed = fileInNetwork.substring(0, fileInNetwork.indexOf("."));
+                for (String fileInShDir : filesInSharedDirectory) {
+                    String fileInSHDirTrimmed = fileInShDir.substring(0, fileInShDir.indexOf("."));
+                    if (fileInSHDirTrimmed.equals(fileInNetworkTrimmed)) {
+                        seedingFiles.add(fileInShDir);
+                        break;
+                    }
+                }
+            }
+            return seedingFiles;
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

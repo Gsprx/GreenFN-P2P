@@ -3,18 +3,26 @@ import misc.Config;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
 
-public class PeerServerThread extends Thread{
+public class PeerServerThread extends Thread {
     private ObjectInputStream in;
     private Socket connection;
     private ArrayList<String> filesInNetwork;
+    private ArrayList<HashSet<String>> partitionsInNetwork;
+    private ArrayList<String> seederOfFiles;
     private String shared_directory;
+    private Integer seederRequestCounter;
 
-    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, String shared_directory){
+    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, ArrayList<HashSet<String>> partitionsInNetwork, ArrayList<String> seederOfFiles, String shared_directory) {
         //handle connection
         this.filesInNetwork = filesInNetwork;
+        this.partitionsInNetwork = partitionsInNetwork;
+        this.seederOfFiles = seederOfFiles;
         this.connection = connection;
         this.shared_directory = shared_directory;
+        this.seederRequestCounter = 0;
         try {
             in = new ObjectInputStream(connection.getInputStream());
         } catch (IOException e) {
@@ -34,6 +42,9 @@ public class PeerServerThread extends Thread{
                     break;
                 case 8:
                     handleSimpleDownload();
+                    break;
+                case 12:
+                    seederServe();
                     break;
                 default:
                     break;
@@ -107,6 +118,20 @@ public class PeerServerThread extends Thread{
             sendResult(new ObjectOutputStream(connection.getOutputStream()), response);
 
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void seederServe() {
+        this.seederRequestCounter++;
+        try {
+            while (true) {
+                int connected = this.seederRequestCounter;
+                TimeUnit.SECONDS.sleep(2);
+                System.out.println("YO");
+                if (connected != this.seederRequestCounter);
+            }
+        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
