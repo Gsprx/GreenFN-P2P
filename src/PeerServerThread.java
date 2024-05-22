@@ -3,8 +3,10 @@ import misc.Config;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class PeerServerThread extends Thread {
     private ObjectInputStream in;
@@ -13,16 +15,25 @@ public class PeerServerThread extends Thread {
     private ArrayList<HashSet<String>> partitionsInNetwork;
     private ArrayList<String> seederOfFiles;
     private String shared_directory;
-    private Integer seederRequestCounter;
+    // Map of requested files and the initial thread that got the request
+    private HashMap<String, String> threadByFile;
+    // Map of partitions each peer requested and the thread that works on serving them, (#12ae23, [peer1, {file1-1.txt, file1-3.txt}])
+    private HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread;
+    // Locks the threadByFile and peerPartitionsByThread
+    private ReentrantLock lock;
 
-    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, ArrayList<HashSet<String>> partitionsInNetwork, ArrayList<String> seederOfFiles, String shared_directory) {
+    public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, ArrayList<HashSet<String>> partitionsInNetwork,
+                            ArrayList<String> seederOfFiles, String shared_directory, HashMap<String, String> threadByFile,
+                            HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread, ReentrantLock lock) {
         //handle connection
         this.filesInNetwork = filesInNetwork;
         this.partitionsInNetwork = partitionsInNetwork;
         this.seederOfFiles = seederOfFiles;
         this.connection = connection;
         this.shared_directory = shared_directory;
-        this.seederRequestCounter = 0;
+        this.threadByFile = threadByFile;
+        this.peerPartitionsByThread = peerPartitionsByThread;
+        this.lock = lock;
         try {
             in = new ObjectInputStream(connection.getInputStream());
         } catch (IOException e) {
@@ -123,15 +134,28 @@ public class PeerServerThread extends Thread {
     }
 
     private void seederServe() {
-        this.seederRequestCounter++;
         try {
-            while (true) {
-                int connected = this.seederRequestCounter;
+            // get the specific thread name
+            String threadName = Thread.currentThread().getName();
+            // get file name
+            String fileName = (String) in.readObject();
+            // get peer and the partitions he requested for this file name
+            HashMap<String, ArrayList<String>> partitionsReqByPeer = (HashMap<String, ArrayList<String>>) in.readObject();
+            // if the file name does not exit in the struct, add it and wait for 200ms for more potential requests for this file
+            lock.lock();
+            if (!this.threadByFile.containsKey(fileName)) {
+                this.threadByFile.put(fileName, threadName);
+                this.peerPartitionsByThread.put(threadName, partitionsReqByPeer);
+                lock.unlock();
                 TimeUnit.SECONDS.sleep(2);
-                System.out.println("YO");
-                if (connected != this.seederRequestCounter);
+            } else {
+                String initThread = this.threadByFile.get(fileName);
+                HashMap<String, ArrayList<String>> newPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+                newPeerPartitionsReq.putAll(partitionsReqByPeer);
+                this.peerPartitionsByThread.put(initThread, newPeerPartitionsReq);
+                lock.unlock();
             }
-        } catch (InterruptedException e) {
+        } catch (IOException | ClassNotFoundException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }

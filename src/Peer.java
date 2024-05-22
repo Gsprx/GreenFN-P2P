@@ -14,6 +14,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 public class Peer {
@@ -30,8 +31,14 @@ public class Peer {
     private ArrayList<String> seederOfFiles;
     boolean isPeerOnline;
     ServerSocket server;
-
     private boolean isSeeder;
+
+    // Map of requested files and the initial thread that got the request
+    private HashMap<String, String> threadByFile;
+    // Map of partitions each peer requested and the thread that works on serving them, (#12ae23, [peer1, {file1-1.txt, file1-3.txt}])
+    private HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread;
+    // Locks the threadByFile and peerPartitionsByThread
+    private ReentrantLock lock;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
@@ -43,6 +50,9 @@ public class Peer {
         this.seederOfFiles = seederOfFilesInNetwork();
         this.isSeeder = this.seederOfFiles.size() > 0;
         this.isPeerOnline = false;
+        threadByFile = new HashMap<>();
+        peerPartitionsByThread = new HashMap<>();
+        this.lock = new ReentrantLock();
     }
 
     /**
@@ -189,7 +199,8 @@ public class Peer {
                     server = new ServerSocket(this.port);
                     while(isPeerOnline) {
                         Socket inConnection = server.accept();
-                        Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork, this.seederOfFiles, this.shared_directory);
+                        Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork,
+                                this.seederOfFiles, this.shared_directory, this.threadByFile, this.peerPartitionsByThread, this.lock);
                         t.start();
                     }
                 } catch (IOException e) {
