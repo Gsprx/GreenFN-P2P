@@ -3,6 +3,7 @@ import misc.Config;
 import java.io.*;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -20,10 +21,13 @@ public class PeerServerThread extends Thread {
     private HashMap<String, HashMap<Socket, ArrayList<String>>> peerPartitionsByThread2;
     // Locks the threadByFile and peerPartitionsByThread
     private ReentrantLock lock;
+    //Map of partitions that each peer has sent you (peer#123, {file1-1.txt, file4-3.txt})
+    private ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer;
 
     public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, ArrayList<HashSet<String>> partitionsInNetwork,
                             ArrayList<String> seederOfFiles, String shared_directory, HashMap<String, String> threadByFile,
-                            HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread, ReentrantLock lock) {
+                            HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread, ReentrantLock lock,
+                            ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer) {
         //handle connection
         this.filesInNetwork = filesInNetwork;
         this.partitionsInNetwork = partitionsInNetwork;
@@ -33,6 +37,7 @@ public class PeerServerThread extends Thread {
         this.threadByFile = threadByFile;
         this.peerPartitionsByThread = peerPartitionsByThread;
         this.lock = lock;
+        this.partitionsByPeer = partitionsByPeer;
         try {
             in = new ObjectInputStream(connection.getInputStream());
         } catch (IOException e) {
@@ -279,11 +284,17 @@ public class PeerServerThread extends Thread {
                         ArrayList<String> requestedPartitions = partitionsRequestsPerPeer2.get(socket);
                         //Select a random partition from the ArrayList
                         String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
-                        //Send "OK" code - this can be removed
-                        outputStream.writeObject("OK");
-                        outputStream.flush();
-                        //Send the selected part
-                        sendFile(outputStream,selectedPart);
+                        if(!this.filesInNetwork.contains(selectedPart)){//todo with partitionsInNetwork
+                            //Send "OK" code - this can be removed
+                            outputStream.writeObject("OK");
+                            outputStream.flush();
+                        }else{
+                            //Send "OK" code - this can be removed
+                            outputStream.writeObject("OK");
+                            outputStream.flush();
+                            //Send the selected part
+                            sendFile(outputStream,selectedPart);
+                        }
                     }
                 }else {
                     //B

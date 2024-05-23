@@ -14,6 +14,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -39,6 +40,8 @@ public class Peer {
     private HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread;
     // Locks the threadByFile and peerPartitionsByThread
     private ReentrantLock lock;
+    //Map of partitions that each peer has sent you (peer#123, {file1-1.txt, file4-3.txt})
+    private ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
@@ -54,6 +57,7 @@ public class Peer {
         threadByFile = new HashMap<>();
         peerPartitionsByThread = new HashMap<>();
         this.lock = new ReentrantLock();
+        this.partitionsByPeer = new ConcurrentHashMap<String, ArrayList<String>>();
     }
 
     /**
@@ -201,7 +205,8 @@ public class Peer {
                     while(isPeerOnline) {
                         Socket inConnection = server.accept();
                         Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork,
-                                this.seederOfFiles, this.shared_directory, this.threadByFile, this.peerPartitionsByThread, this.lock);
+                                this.seederOfFiles, this.shared_directory, this.threadByFile, this.peerPartitionsByThread,
+                                this.lock, this.partitionsByPeer);
                         t.start();
                     }
                 } catch (IOException e) {
