@@ -54,7 +54,7 @@ public class PeerServerThread extends Thread {
                     handleSimpleDownload();
                     break;
                 case 12:
-                    seederServe();
+                    collaborativeDownloadHandler();
                     break;
                 default:
                     break;
@@ -78,6 +78,23 @@ public class PeerServerThread extends Thread {
             sendResult(out,1);
             sendFile(out, filename);
 
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Handle the collaborative Download
+     * */
+    private void collaborativeDownloadHandler(){
+        try {
+            String fileName = (String) in.readObject();
+            HashMap<String, ArrayList<String>> partitionsReqByPeer = (HashMap<String, ArrayList<String>>) in.readObject();
+            if(this.seederOfFiles.contains(fileName)){
+                seederServe(fileName, partitionsReqByPeer);
+            }else {
+                collaborativeDownload(fileName, partitionsReqByPeer);
+            }
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -132,14 +149,14 @@ public class PeerServerThread extends Thread {
         }
     }
 
-    private void seederServe() {
+    private void seederServe(String fileName, HashMap<String, ArrayList<String>> partitionsReqByPeer) {
         try {
             // get the specific thread name
             String threadName = Thread.currentThread().getName();
             // get file name
-            String fileName = (String) in.readObject();
+//            String fileName = (String) in.readObject();
             // get peer and the partitions he requested for this file name
-            HashMap<String, ArrayList<String>> partitionsReqByPeer = (HashMap<String, ArrayList<String>>) in.readObject();
+//            HashMap<String, ArrayList<String>> partitionsReqByPeer = (HashMap<String, ArrayList<String>>) in.readObject();
             // if the file name does not exit in the struct, add it and wait for 200ms for more potential requests for this file
             lock.lock();
             if (!this.threadByFile.containsKey(fileName)) {
@@ -190,8 +207,9 @@ public class PeerServerThread extends Thread {
                 outputStream.writeObject("OK");
                 outputStream.flush();
                 //Send the selected part
-                outputStream.writeObject(selectedPart2);
-                outputStream.flush();
+//                outputStream.writeObject(selectedPart2);
+//                outputStream.flush();
+                sendFile(outputStream,selectedPart2);
                 //Send "DENIED" to the rest
                 involvedPeers2.remove(selectedPeer2);
                 for(Socket socket : involvedPeers2){
@@ -219,8 +237,77 @@ public class PeerServerThread extends Thread {
                 this.peerPartitionsByThread.put(initThread, newPeerPartitionsReq);
                 lock.unlock();
             }
-            return;
-        } catch (IOException | ClassNotFoundException | InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /***/
+    private void collaborativeDownload(String fileName, HashMap<String, ArrayList<String>> partitionsReqByPeer){
+        try {
+            // get the specific thread name
+            String threadName = Thread.currentThread().getName();
+
+            lock.lock();
+            if (!this.threadByFile.containsKey(fileName)) {
+                this.threadByFile.put(fileName, threadName);
+                this.peerPartitionsByThread.put(threadName, partitionsReqByPeer);
+
+                //Testing
+                HashMap<Socket, ArrayList<String>> innerMap = new HashMap<>();
+                for (String key : partitionsReqByPeer.keySet()) {
+                    innerMap.put(this.connection, partitionsReqByPeer.get(key));
+                }
+                peerPartitionsByThread2.put(threadName, innerMap);
+                //Testing-end
+
+                lock.unlock();
+                TimeUnit.MILLISECONDS.sleep(200);
+                lock.lock();
+                this.threadByFile.remove(fileName);
+                HashMap<String, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.remove(threadName);
+                //Testing
+                HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer2 = this.peerPartitionsByThread2.remove(threadName);
+                //Testing-end
+                lock.unlock();
+
+                if(partitionsRequestsPerPeer2.size()==1){
+                    //A
+                    for (Socket socket : partitionsRequestsPerPeer2.keySet()){
+                        ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
+                        //Retrieve the ArrayList of file partitions requested of the random peer
+                        ArrayList<String> requestedPartitions = partitionsRequestsPerPeer2.get(socket);
+                        //Select a random partition from the ArrayList
+                        String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
+                        //Send "OK" code - this can be removed
+                        outputStream.writeObject("OK");
+                        outputStream.flush();
+                        //Send the selected part
+                        sendFile(outputStream,selectedPart);
+                    }
+                }else {
+                    //B
+                }
+
+            } else {
+                String initThread = this.threadByFile.get(fileName);
+                HashMap<String, ArrayList<String>> newPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+
+                //Testing
+                HashMap<Socket, ArrayList<String>> newPeerPartitionsReq2 = this.peerPartitionsByThread2.get(initThread);
+                HashMap<Socket, ArrayList<String>> innerMap = new HashMap<>();
+                for (String key : partitionsReqByPeer.keySet()) {
+                    innerMap.put(this.connection, partitionsReqByPeer.get(key));
+                }
+                newPeerPartitionsReq2.putAll(innerMap);
+                this.peerPartitionsByThread2.put(initThread,newPeerPartitionsReq2);
+                //Testing-end
+
+                newPeerPartitionsReq.putAll(partitionsReqByPeer);
+                this.peerPartitionsByThread.put(initThread, newPeerPartitionsReq);
+                lock.unlock();
+            }
+        } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
     }

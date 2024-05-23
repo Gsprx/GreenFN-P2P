@@ -70,7 +70,7 @@ public enum Function {
         }
     },
 
-    SEEDER_SERVER {
+    COLLABORATIVE_DOWNLOAD_HANDLER {
         @Override
         public int getEncoded() { return 12; }
     };
