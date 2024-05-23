@@ -173,7 +173,7 @@ public class PeerServerThread extends Thread {
                 for (String key : partitionsReqByPeer.keySet()) {
                     innerMap.put(this.connection, partitionsReqByPeer.get(key));
                 }
-                peerPartitionsByThread2.put(threadName, innerMap);
+                this.peerPartitionsByThread2.put(threadName, innerMap);
                 //Testing-end
 
                 lock.unlock();
@@ -298,6 +298,20 @@ public class PeerServerThread extends Thread {
                     }
                 }else {
                     //B
+                    int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
+                    int randomIndex = new Random().nextInt(10);
+                    int decision = chanceBucket[randomIndex];
+
+                    switch (decision) {
+                        case 0:
+                            break;
+                        case 1:
+                            break;
+                        case 2:
+                            break;
+                        default:
+                            break;
+                    }
                 }
 
             } else {
