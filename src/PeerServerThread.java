@@ -306,6 +306,7 @@ public class PeerServerThread extends Thread {
                         case 1:
                             break;
                         case 2:
+                            peerWithMostSegmentsSent(fileName);
                             break;
                         default:
                             break;
@@ -329,6 +330,14 @@ public class PeerServerThread extends Thread {
         } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void peerWithMostSegmentsSent(String filename) {
+        //find requester peer who sent the most segments to us
+        String maxPeer;
+        int maxCount;
+
+
     }
 
     private double priorityFormula(int countDownloads, int countFailures) {
