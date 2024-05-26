@@ -1,4 +1,5 @@
 import misc.Config;
+import misc.Function;
 
 import java.io.*;
 import java.net.Socket;
@@ -333,9 +334,75 @@ public class PeerServerThread extends Thread {
     }
 
     private void peerWithMostSegmentsSent(String filename) {
-        //find requester peer who sent the most segments to us
-        String maxPeer;
-        int maxCount;
+        //find all peers who requested segments of the specific file - filename
+        HashSet<Socket> peerRequesters = new HashSet<>();
+        
+        //TODO: Try to optimize data structs to avoid 3D for loop
+        for (HashMap<Socket, ArrayList<String>> socketSegmentsHashMap : peerPartitionsByThread.values()) {
+            for(Socket peer : socketSegmentsHashMap.keySet()){
+                for(String segment : socketSegmentsHashMap.get(peer)){
+                    if (segment.contains(filename)){
+                        peerRequesters.add(peer);
+                    }
+                }
+            }
+        }
+
+        //find requesting peer with the most segments sent to us
+        Socket maxPeer = null;
+        int maxCount = 0;
+        for(Socket peer : peerRequesters){
+            int currentSegmentCount = partitionsByPeer.get(peerUsernamesByConnection.get(peer)).size();
+            if(currentSegmentCount > maxCount){
+                maxPeer = peer;
+                maxCount = currentSegmentCount;
+            }
+            else if(currentSegmentCount == maxCount){
+                try {
+                    //connect to tracker and get count download/fail to determine max peer in case of equality
+                    Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                    out.writeInt(Function.REPLY_DETAILS.getEncoded());
+                    //TODO: get token id from upper class for out.writeInt(tokenID);
+                    out.writeObject(filename);
+
+                    ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                    //read confirmation code
+                    in.readInt();
+                    ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
+                    ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
+
+
+                    //find current and max peers count fail/download
+                    String maxPeerUsername = peerUsernamesByConnection.get(maxPeer);
+                    String curPeerUsername = peerUsernamesByConnection.get(peer);
+                    int maxPeerIndex = -1;
+                    int curPeerIndex = -1;
+                    for(int i=0; i<fileOwnersInfo.size(); i++){
+                        if(maxPeerIndex<0 && fileOwnersInfo.get(i)[2].equals(maxPeerUsername)){
+                            maxPeerIndex = i;
+                        }
+                        if(curPeerIndex<0 && fileOwnersInfo.get(i)[2].equals(curPeerUsername)){
+                            curPeerIndex = i;
+                        }
+                    }
+
+                    double maxPeerScore = priorityFormula(fileOwnersStatistics.get(maxPeerIndex)[1], fileOwnersStatistics.get(maxPeerIndex)[0]);
+                    double curPeerScore = priorityFormula(fileOwnersStatistics.get(curPeerIndex)[1], fileOwnersStatistics.get(curPeerIndex)[0]);
+
+                    if(maxPeerScore<=curPeerScore){
+                        maxPeer = peer;
+                    }
+
+                } catch (IOException | ClassNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
+        //request missing segments from max peer
+        //check if we are missing any segments for this file
+
 
 
     }
