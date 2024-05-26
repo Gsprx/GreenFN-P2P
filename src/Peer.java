@@ -3,15 +3,12 @@ import misc.Function;
 import misc.TypeChecking;
 
 import java.io.*;
-import java.lang.reflect.Array;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,7 +35,7 @@ public class Peer {
     // Map of requested files and the initial thread that got the request
     private HashMap<String, String> threadByFile;
     // Map of partitions each peer requested and the thread that works on serving them, (#12ae23, [peer1, {file1-1.txt, file1-3.txt}])
-    private HashMap<String, HashMap<String, ArrayList<String>>> peerPartitionsByThread;
+    private HashMap<String, HashMap<Socket, ArrayList<String>>> peerPartitionsByThread;
     // Locks the threadByFile and peerPartitionsByThread
     private ReentrantLock lock;
     //Map of partitions that each peer has sent you (peer#123, {file1-1.txt, file4-3.txt})
@@ -55,8 +52,8 @@ public class Peer {
         this.partitionsInNetwork = peersPartitionsInNetwork();
         this.isSeeder = this.seederOfFiles.size() > 0;
         this.isPeerOnline = false;
-        threadByFile = new HashMap<>();
-        peerPartitionsByThread = new HashMap<>();
+        this.threadByFile = new HashMap<>();
+        this.peerPartitionsByThread = new HashMap<>();
         this.lock = new ReentrantLock();
         this.partitionsByPeer = new ConcurrentHashMap<String, ArrayList<String>>();
     }
@@ -206,8 +203,8 @@ public class Peer {
                     while(isPeerOnline) {
                         Socket inConnection = server.accept();
                         Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork,
-                                this.seederOfFiles, this.shared_directory, this.threadByFile, this.peerPartitionsByThread,
-                                this.lock, this.partitionsByPeer);
+                                this.seederOfFiles, this.shared_directory, this.threadByFile,
+                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer);
                         t.start();
                     }
                 } catch (IOException e) {
@@ -1092,6 +1089,8 @@ public class Peer {
                                 String nameOfPartition = (String) in.readObject();
                                 // TODO: read the contents of the file and write to shared_directory
                                 // TODO: notify tracker and corresponding data structures in peer
+                                // update the partitions sent by the peer we downloaded from
+                                this.partitionsByPeer.get(peer[0]).add(nameOfPartition);
                                 // code for sending back one of this peer's partitions (if the other peer requested for it)
                                 int sendBackPartitionCode = in.readInt();
                                 if (sendBackPartitionCode == 1) {
