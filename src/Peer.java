@@ -309,7 +309,7 @@ public class Peer {
      * @param filename The name of the file we want to look up.
      * @return A pair of the peers that own the files along with the statistics of each peer for the file.
      */
-    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename) {
+    private ArrayList<Object> details(String filename) {
         System.out.println("\n|Details|");
         //Input from peer - filename
         if (filename == null) {
@@ -378,7 +378,14 @@ public class Peer {
                         System.out.println();
                     }
                     System.out.println();
-                    return new AbstractMap.SimpleEntry<>(fileOwnersInfo,fileOwnersStatistics);
+
+                    ArrayList<Object> result = new ArrayList<>();
+                    result.add(fileOwnersInfo);
+                    result.add(fileOwnersStatistics);
+                    result.add(fileOwnersPartitions);
+                    result.add(fileOwnersSeederBit);
+
+                    return result;
             }
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -471,10 +478,10 @@ public class Peer {
             throw new RuntimeException(e);
         }
         // get the details of the file the peer wants to download
-        Map.Entry<ArrayList<String[]>, ArrayList<int[]>> detailsResult = details(fileName);
+        ArrayList<Object> detailsResult = details(fileName);
         if (detailsResult == null) return;
-        ArrayList<String[]> fileOwnersInfo = detailsResult.getKey();
-        ArrayList<int[]> fileOwnersStatistics = detailsResult.getValue();
+        ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) detailsResult.get(0);
+        ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) detailsResult.get(1);
 
         // check the peers who own this file and are active
         ArrayList<String[]> activeFileOwners = new ArrayList<>();
@@ -1002,8 +1009,71 @@ public class Peer {
      * TODO: Maybe replace downloadFile with this completely
      */
     private void collaborativeDownload() {
-        String nextFile = select();
-        System.out.println(nextFile);
+        while (true) {
+            String nextFile = select();
+            if (nextFile.isEmpty()) {
+                System.out.println("There are no other available partitions for any file");
+                break;
+            }
+            System.out.println("\nChoosing file: " + nextFile);
+
+            ArrayList<Object> detailsResult = details(nextFile);
+            if (detailsResult == null) {
+                System.out.println("There are no online peers with the file " + nextFile);
+                continue;
+            }
+            // get file owners
+            ArrayList<String[]> peersOwningFile = (ArrayList<String[]>) detailsResult.get(0);
+            ArrayList<int[]> peersOwningFileStats = (ArrayList<int[]>) detailsResult.get(1);
+            ArrayList<ArrayList<String>> peersOwningFilePartitions = (ArrayList<ArrayList<String>>) detailsResult.get(2);
+            ArrayList<Boolean> peersOwningFileSeederBit = (ArrayList<Boolean>) detailsResult.get(3);
+
+            ArrayList<String[]> peersToRequestTo = new ArrayList<>();
+
+            // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
+            if (peersOwningFile.size() > 4) {
+                int requestToSeederCounter = 0; // we want at most 2 seeders
+                while (peersToRequestTo.size() < 4) {
+                    int randIndex = new Random().nextInt(peersOwningFile.size());
+                    // if we've already selected this peer then skip
+                    if (peersToRequestTo.contains(peersOwningFile.get(randIndex))) continue;
+                    // if the index shows to a seeder and the counter says we haven't selected more than 2 seeders yet,
+                    // then add him to the peers we are going to send the request
+                    if (peersOwningFileSeederBit.get(randIndex) && requestToSeederCounter < 2) {
+                        peersToRequestTo.add(peersOwningFile.get(randIndex));
+                        requestToSeederCounter++;
+                    } else if (!peersOwningFileSeederBit.get(randIndex)) {
+                        peersToRequestTo.add(peersOwningFile.get(randIndex));
+                    }
+                }
+            } else { // if the peers owning parts of this file are 4 or less, then select them all
+                peersToRequestTo.addAll(peersOwningFile);
+            }
+
+            // get the peers statistics
+            int[] stats = getStatistics(this.tokenID);
+
+
+
+        }
+    }
+
+    private int[] getStatistics(int tokenID) {
+        try {
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.writeInt(Function.REPLY_PEER_STATISTICS.getEncoded());
+            out.writeInt(tokenID);
+            out.flush();
+
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            return (int[]) in.readObject();
+
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     public static void main(String[] args) {

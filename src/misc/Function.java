@@ -73,6 +73,12 @@ public enum Function {
     COLLABORATIVE_DOWNLOAD_HANDLER {
         @Override
         public int getEncoded() { return 12; }
+    },
+    REPLY_PEER_STATISTICS {
+        @Override
+        public int getEncoded() {
+            return 13;
+        }
     };
 
     public abstract int getEncoded();

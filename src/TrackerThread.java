@@ -77,7 +77,11 @@ public class TrackerThread extends Thread{
                 }
                 case 11:{
                     seederInform();
+                    break;
                 }
+                case 13:
+                    replyUserStatistics();
+                    break;
 
             }//switch
         }//try
@@ -451,8 +455,6 @@ public class TrackerThread extends Thread{
             //List with [SeederBoolean/Bit]
             ArrayList<Boolean> fileOwnersSeederBit = new ArrayList<>();
 
-
-
             //collect all token ids from file's partition owners
             HashSet<Integer> fileOwnerIDs = new HashSet<>();
 
@@ -489,9 +491,6 @@ public class TrackerThread extends Thread{
                 }
             }
 
-
-
-
             //send result to requester
             if(fileOwnersInfo.isEmpty() || fileOwnersStatistics.isEmpty()){
                 //send code for fail (no active owners found of requested file)
@@ -517,6 +516,26 @@ public class TrackerThread extends Thread{
         }
 
     }
+
+    // code 13
+    private void replyUserStatistics() {
+        try {
+            //identify requester
+            int requesterTokenID = in.readInt();
+            // get peer username
+            String userName = activeUsers.get(requesterTokenID)[0];
+            // get user statistics
+            int[] stats = userCountStatistics.get(userName);
+
+            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
+            out.writeObject(stats);
+            out.flush();
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     //code = 11
     //expected input is token id, String filename and HashSet<String> fileParts
     private void seederInform(){
