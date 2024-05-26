@@ -15,6 +15,7 @@ import java.util.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -349,6 +350,8 @@ public class Peer {
                     ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
                     ArrayList<ArrayList<String>> fileOwnersPartitions = (ArrayList<ArrayList<String>>) in.readObject();
                     ArrayList<Boolean> fileOwnersSeederBit = (ArrayList<Boolean>) in.readObject();
+                    int totalNumberOfParts = in.readInt();
+                    System.out.println("Total number of parts: " + totalNumberOfParts);
                     System.out.println("Peer\t|" + "IP\t\t\t\t|" + "Port\t|" + "Username\t\t\t\t|" + "Downloads\t\t|" + "Fails");
                     for(int i=0; i<fileOwnersInfo.size(); i++){
                         //Maybe write somewhere what are the values we see. Preferable before this for
@@ -384,6 +387,7 @@ public class Peer {
                     result.add(fileOwnersStatistics);
                     result.add(fileOwnersPartitions);
                     result.add(fileOwnersSeederBit);
+                    result.add(totalNumberOfParts);
 
                     return result;
             }
@@ -1022,39 +1026,117 @@ public class Peer {
                 System.out.println("There are no online peers with the file " + nextFile);
                 continue;
             }
+
+            // TODO: if from the parts the available peers own we are not missing any, then bye bye, continue
+
             // get file owners
             ArrayList<String[]> peersOwningFile = (ArrayList<String[]>) detailsResult.get(0);
-            ArrayList<int[]> peersOwningFileStats = (ArrayList<int[]>) detailsResult.get(1);
-            ArrayList<ArrayList<String>> peersOwningFilePartitions = (ArrayList<ArrayList<String>>) detailsResult.get(2);
+            /*ArrayList<int[]> peersOwningFileStats = (ArrayList<int[]>) detailsResult.get(1);
+            ArrayList<ArrayList<String>> peersOwningFilePartitions = (ArrayList<ArrayList<String>>) detailsResult.get(2);*/
             ArrayList<Boolean> peersOwningFileSeederBit = (ArrayList<Boolean>) detailsResult.get(3);
+            int totalNumberOfParts = (int) detailsResult.get(4);
 
-            ArrayList<String[]> peersToRequestTo = new ArrayList<>();
+            boolean fileAssembled = false;
+            while (!fileAssembled) {
+                ArrayList<String[]> peersToRequestTo = new ArrayList<>();
 
-            // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
-            if (peersOwningFile.size() > 4) {
-                int requestToSeederCounter = 0; // we want at most 2 seeders
-                while (peersToRequestTo.size() < 4) {
-                    int randIndex = new Random().nextInt(peersOwningFile.size());
-                    // if we've already selected this peer then skip
-                    if (peersToRequestTo.contains(peersOwningFile.get(randIndex))) continue;
-                    // if the index shows to a seeder and the counter says we haven't selected more than 2 seeders yet,
-                    // then add him to the peers we are going to send the request
-                    if (peersOwningFileSeederBit.get(randIndex) && requestToSeederCounter < 2) {
-                        peersToRequestTo.add(peersOwningFile.get(randIndex));
-                        requestToSeederCounter++;
-                    } else if (!peersOwningFileSeederBit.get(randIndex)) {
-                        peersToRequestTo.add(peersOwningFile.get(randIndex));
+                // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
+                if (peersOwningFile.size() > 4) {
+                    int requestToSeederCounter = 0; // we want at most 2 seeders
+                    while (peersToRequestTo.size() < 4) {
+                        int randIndex = new Random().nextInt(peersOwningFile.size());
+                        // if we've already selected this peer then skip
+                        if (peersToRequestTo.contains(peersOwningFile.get(randIndex))) continue;
+                        // if the index shows to a seeder and the counter says we haven't selected more than 2 seeders yet,
+                        // then add him to the peers we are going to send the request
+                        if (peersOwningFileSeederBit.get(randIndex) && requestToSeederCounter < 2) {
+                            peersToRequestTo.add(peersOwningFile.get(randIndex));
+                            requestToSeederCounter++;
+                        } else if (!peersOwningFileSeederBit.get(randIndex)) {
+                            peersToRequestTo.add(peersOwningFile.get(randIndex));
+                        }
+                    }
+                } else { // if the peers owning parts of this file are 4 or less, then select them all
+                    peersToRequestTo.addAll(peersOwningFile);
+                }
+
+                // get this peer's statistics
+                int[] stats = getStatistics(this.tokenID);
+
+                HashSet<String> partitionsOfFileOwned = this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile));
+
+                // open connections with all the selected peers and send request
+                int[] threadsFinished = new int[peersToRequestTo.size()]; // check which threads have finished
+                for (int i = 0; i < peersToRequestTo.size(); i++) {
+                    int finalI = i;
+                    Thread peerRequestsThread = new Thread(() -> {
+                        try {
+                            String[] peer = peersToRequestTo.get(finalI);
+                            Socket connection = new Socket(peer[1], Integer.parseInt(peer[2]));
+                            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
+                            // write collaborative function code
+                            out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
+                            // write file name
+                            out.writeObject(nextFile);
+                            // write the partitions of this file this peer owns
+                            out.writeObject(partitionsOfFileOwned);
+                            // write the stats of this peer
+                            out.writeObject(stats);
+                            out.flush();
+
+                            ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
+                            int result = in.readInt();
+                            if (result == 0) {
+                                System.out.println(peer[0] + " denied request.");
+                            } else {
+                                String nameOfPartition = (String) in.readObject();
+                                // TODO: read the contents of the file and write to shared_directory
+                                // TODO: notify tracker and corresponding data structures in peer
+                                // code for sending back one of this peer's partitions (if the other peer requested for it)
+                                int sendBackPartitionCode = in.readInt();
+                                if (sendBackPartitionCode == 1) {
+                                    // get the parts the other peer owns
+                                    HashSet<String> partitionsOwnedByOtherPeer = (HashSet<String>) in.readObject();
+                                    // create a set where we will store the parts this peer owns but the other peer does not
+                                    ArrayList<String> candidatePartsToSend = new ArrayList<>();
+                                    for (String partName : partitionsOfFileOwned) {
+                                        if (!partitionsOwnedByOtherPeer.contains(partName)) {
+                                            candidatePartsToSend.add(partName);
+                                        }
+                                    }
+                                    // choose the part to send
+                                    String partNameToSend = candidatePartsToSend.get(new Random().nextInt(candidatePartsToSend.size()));
+                                    out.writeObject(partNameToSend);
+                                    // TODO: send the contents of this part
+                                }
+                            }
+                            threadsFinished[finalI] = 1;
+                        } catch (IOException | ClassNotFoundException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+                    peerRequestsThread.start();
+                }
+                // wait for all the threads to finish before moving on
+                while (Arrays.stream(threadsFinished).sum() < peersToRequestTo.size()) {
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(100);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
                     }
                 }
-            } else { // if the peers owning parts of this file are 4 or less, then select them all
-                peersToRequestTo.addAll(peersOwningFile);
+
+                // TODO: if everyone rejects we call details from tracker after 500ms (from the last denial)
+                // TODO: if from the parts the available peers own we are not missing any, then bye bye, break
+
+                // check if the file is whole
+                if (this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile)).size() == totalNumberOfParts) {
+                    fileAssembled = true;
+                    assembleFile(nextFile, totalNumberOfParts);
+                }
             }
 
-            // get the peers statistics
-            int[] stats = getStatistics(this.tokenID);
-
-
-
+            // TODO: if we went through all the files and we couldn't download some, then break (because we will end up in an infinite loop)
         }
     }
 

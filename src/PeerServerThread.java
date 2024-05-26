@@ -94,11 +94,12 @@ public class PeerServerThread extends Thread {
     private void collaborativeDownloadHandler(){
         try {
             String fileName = (String) in.readObject();
-            HashMap<String, ArrayList<String>> partitionsReqByPeer = (HashMap<String, ArrayList<String>>) in.readObject();
-            if(this.seederOfFiles.contains(fileName)){
-                seederServe(fileName, partitionsReqByPeer);
+            // get the parts of the files that the user already has (so the other peers don't send already existing files)
+            ArrayList<String> partitionsOwnedByPeer = (ArrayList<String>) in.readObject();
+            if(this.seederOfFiles.contains(fileName)) {
+                seederServe(fileName, partitionsOwnedByPeer);
             }else {
-                collaborativeDownload(fileName, partitionsReqByPeer);
+                collaborativeDownload(fileName, partitionsOwnedByPeer);
             }
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -154,7 +155,7 @@ public class PeerServerThread extends Thread {
         }
     }
 
-    private void seederServe(String fileName, HashMap<String, ArrayList<String>> partitionsReqByPeer) {
+    private void seederServe(String fileName, ArrayList<String> partitionsReqByPeer) {
         try {
             // get the specific thread name
             String threadName = Thread.currentThread().getName();
@@ -248,7 +249,7 @@ public class PeerServerThread extends Thread {
     }
 
     /***/
-    private void collaborativeDownload(String fileName, HashMap<String, ArrayList<String>> partitionsReqByPeer){
+    private void collaborativeDownload(String fileName, ArrayList<String> partitionsReqByPeer) {
         try {
             // get the specific thread name
             String threadName = Thread.currentThread().getName();

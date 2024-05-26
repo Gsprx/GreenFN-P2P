@@ -82,7 +82,6 @@ public class TrackerThread extends Thread{
                 case 13:
                     replyUserStatistics();
                     break;
-
             }//switch
         }//try
         catch (IOException e) {
