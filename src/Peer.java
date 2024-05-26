@@ -50,8 +50,8 @@ public class Peer {
         createFileDownloadList();
         //Here we may have to partition the completed files
         this.filesInNetwork = peersFilesInNetwork();
-        this.partitionsInNetwork = peersPartitionsInNetwork();
         this.seederOfFiles = seederOfFilesInNetwork();
+        this.partitionsInNetwork = peersPartitionsInNetwork();
         this.isSeeder = this.seederOfFiles.size() > 0;
         this.isPeerOnline = false;
         threadByFile = new HashMap<>();
@@ -233,25 +233,25 @@ public class Peer {
         boolean running = true;
         // logged in peer actions
         while (running) {
-            System.out.println("1) List\n2) Details\n3) Check Active\n4) Simple Download\n5) LogOut\n");
+            System.out.println("1) List\n2) Details\n3) Check Active\n4) Simple Download\n5) Collaborative Download\n6) LogOut\n");
             String option;
             // if the user gives invalid info then ask again
             do {
                 System.out.print("> ");
                 Scanner inp = new Scanner(System.in);
                 option = inp.nextLine().toLowerCase().trim();
-                if (!option.equals("1") && !option.equals("2") && !option.equals("3") && !option.equals("4") && !option.equals("5")) System.out.println("[-] Option \"" + option + "\" not found.");
-            } while (!option.equals("1") && !option.equals("2") && !option.equals("3") && !option.equals("4") && !option.equals("5"));
+                if (!option.equals("1") && !option.equals("2") && !option.equals("3") && !option.equals("4") && !option.equals("5") && !option.equals("6")) System.out.println("[-] Option \"" + option + "\" not found.");
+            } while (!option.equals("1") && !option.equals("2") && !option.equals("3") && !option.equals("4") && !option.equals("5") && !option.equals("6"));
 
             // manage options
             switch (option) {
                 // option 1: list
                 case "1":
-                    this.list();
+                    list();
                     break;
                 // option 2: details
                 case "2":
-                    this.details(null);
+                    details(null);
                     break;
                 // option 3: check active
                 case "3":
@@ -259,9 +259,13 @@ public class Peer {
                     break;
                 // option 4: simple download
                 case "4":
-                    this.downloadFile();
+                    downloadFile();
                     break;
-                // option 5: logout
+                // option 4: collaborative download
+                case "5":
+                    collaborativeDownload();
+                    break;
+                // option 6: logout
                 default:
                     logout(this.tokenID);
                     running = false;
@@ -305,7 +309,7 @@ public class Peer {
      * @param filename The name of the file we want to look up.
      * @return A pair of the peers that own the files along with the statistics of each peer for the file.
      */
-    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename)    {
+    private Map.Entry<ArrayList<String[]>,ArrayList<int[]>> details(String filename) {
         System.out.println("\n|Details|");
         //Input from peer - filename
         if (filename == null) {
@@ -443,6 +447,7 @@ public class Peer {
         }
         return true;
     }
+
     /**
      * Option 4 | Simple download
      * */
@@ -570,6 +575,7 @@ public class Peer {
                     // notify tracker for successful download
                     System.out.println("File received successfully.");
                     notifyTracker(1, currentPeer, fileName);
+                    this.filesInNetwork.add(fileName);
                     downloaded = true;
                 }
             } catch (IOException e) {
@@ -862,6 +868,12 @@ public class Peer {
                     }
                 }
             }
+
+            /*// split the seeding files
+            for (String f : seedingFiles) {
+                splitFile(f, 524288);
+            }*/
+
             return seedingFiles;
 
         } catch (IOException e) {
@@ -985,8 +997,17 @@ public class Peer {
         return selectedFile;
     }
 
+    /**
+     * Collaborative Download Method
+     * TODO: Maybe replace downloadFile with this completely
+     */
+    private void collaborativeDownload() {
+        String nextFile = select();
+        System.out.println(nextFile);
+    }
+
     public static void main(String[] args) {
-        //IP-Port-Shared_Directory Path
+        // IP-Port-Shared_Directory Path
         Peer peer = new Peer(args[0], Integer.parseInt(args[1]), args[2]);
         // start the thread for the user
         Thread runPeer = new Thread(peer::runPeer);

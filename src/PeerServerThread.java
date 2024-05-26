@@ -337,6 +337,10 @@ public class PeerServerThread extends Thread {
         }
     }
 
+    private double priorityFormula(int countDownloads, int countFailures) {
+        return Math.pow(0.75, countDownloads) * Math.pow(1.25, countFailures);
+    }
+
     private void sendResult(ObjectOutputStream out, Object r) {
         try {
             out.writeObject(r);
