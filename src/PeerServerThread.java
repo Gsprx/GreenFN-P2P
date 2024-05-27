@@ -288,7 +288,7 @@ public class PeerServerThread extends Thread {
                 //Testing-end
                 lock.unlock();
 
-                if(partitionsRequestsPerPeer.size() == 1) {
+                if (partitionsRequestsPerPeer.size() == 1) {
                     //A
                     for (Socket socket : partitionsRequestsPerPeer.keySet()) {
                         ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
@@ -318,6 +318,7 @@ public class PeerServerThread extends Thread {
                         case 0:
                             break;
                         case 1:
+                            bestPeerFormula(fileName, threadName);
                             break;
                         case 2:
                             peerWithMostSegmentsSent(fileName);
@@ -344,6 +345,48 @@ public class PeerServerThread extends Thread {
         } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void bestPeerFormula(String filename, String threadName) {
+        //find all peers who requested segments of the specific file - filename
+        HashSet<Socket> peerRequestersSet = new HashSet<>();
+
+        for (String thread : this.peerPartitionsByThread.keySet()) {
+            if (thread.equals(threadName)) {
+                HashMap<Socket, ArrayList<String>> partsPerSocket = this.peerPartitionsByThread.get(thread);
+                peerRequestersSet.addAll(partsPerSocket.keySet());
+                break;
+            }
+        }
+
+        // cast hashset to arraylist, so we can serially get each peer
+        ArrayList<Socket> peerRequesters = new ArrayList<>(peerRequestersSet);
+        // array where we will store each peers statistics (download count, download fails)
+        ArrayList<int[]> stats = new ArrayList<>();
+
+        // get each peer's stats
+        for (Socket peerConnection : peerRequesters) {
+            try {
+                ObjectInputStream peerInput = new ObjectInputStream(peerConnection.getInputStream());
+                stats.add((int[]) peerInput.readObject());
+
+            } catch (IOException | ClassNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        // choose the better peer
+        int betterPeerIndex = -1;
+        double prevResult = -1;
+        for (int i = 0; i < peerRequesters.size(); i++) {
+            double result = priorityFormula(stats.get(i)[0], stats.get(i)[1]);
+            if (result > prevResult) {
+                prevResult = result;
+                betterPeerIndex = i;
+            }
+        }
+
+        // TODO: Send appropriate file part and request one as well (if needed)
     }
 
     private void peerWithMostSegmentsSent(String filename) {
