@@ -5,6 +5,7 @@ import java.io.*;
 import java.net.Socket;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -422,6 +423,7 @@ public class PeerServerThread extends Thread {
             }
         }
 
+
         //find requesting peer with the most segments sent to us
         Socket maxPeer = null;
         int maxCount = 0;
@@ -437,14 +439,18 @@ public class PeerServerThread extends Thread {
                     Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                     out.writeInt(Function.REPLY_DETAILS.getEncoded());
-                    //TODO: get token id from upper class for out.writeInt(tokenID);
+                    out.writeInt(tokenID);
                     out.writeObject(filename);
 
                     ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-                    //read confirmation code
+                    //read data from tracker
                     in.readInt();
                     ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
                     ArrayList<int[]> fileOwnersStatistics = (ArrayList<int[]>) in.readObject();
+                    //skip unneeded data
+                    in.readObject();
+                    in.readObject();
+                    in.readInt();
 
 
                     //find current and max peers count fail/download
@@ -473,12 +479,83 @@ public class PeerServerThread extends Thread {
                 }
             }
         }
+
+        ObjectOutputStream out;
+        //notify all other requesting peers about their failure of choice
+        for(Socket peer : peerRequesters){
+            if(peer.equals(maxPeer)){
+                continue;
+            }
+            try {
+                out = new ObjectOutputStream(peer.getOutputStream());
+                out.writeInt(0);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         //check if we are missing any segments for this file using the tracker
-        //request missing segments from max peer
+        try {
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            out = new ObjectOutputStream(socket.getOutputStream());
+            out.writeInt(Function.REPLY_DETAILS.getEncoded());
+            out.writeInt(tokenID);
+            out.writeObject(filename);
 
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            //read data from tracker
+            in.readInt();
+            //skip unneeded data
+            in.readObject();
+            in.readObject();
+            //keep data we want to use
+            ArrayList<ArrayList<String>> fileOwnersPartitions = (ArrayList<ArrayList<String>>) in.readObject();
+            ArrayList<Boolean> fileOwnersSeederBit = (ArrayList<Boolean>) in.readObject();
+            //use max number of segments to know if we are missing any segments
+            int maxSegments = in.readInt();
 
+            boolean missingSegments = false;
+            int fileIndex = -1;
 
+            //scan relevant entries in partitions in network datastruct
+            for(int i =0; i<filesInNetwork.size(); i++){
+                if(filesInNetwork.get(i).equals(filename)){
+                    fileIndex = i;
+                    if(partitionsInNetwork.get(i).size()<maxSegments) {
+                        missingSegments = true;
+                    }
+                }
+            }
 
+            if(missingSegments) {
+                //keep all known segment names in a set to compare with local segments available
+                HashSet<String> segmentNames = new HashSet<>();
+                for (int i = 0; i < fileOwnersPartitions.size(); i++) {
+                    segmentNames.addAll(fileOwnersPartitions.get(i));
+                }
+
+                //create a list with all the missing partitions
+                ArrayList<String> missingPartitions = new ArrayList<>();
+                for(String partition : segmentNames){
+                    if(!partitionsInNetwork.get(fileIndex).contains(partition)){
+                        missingPartitions.add(partition);
+                    }
+                }
+
+                //select a random partition to request
+                int randIndex = ThreadLocalRandom.current().nextInt(0,missingPartitions.size());
+                String selectedPartition = missingPartitions.get(randIndex);
+
+                //request missing segments from max peer
+                out = new ObjectOutputStream(maxPeer.getOutputStream());
+                out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
+                //TODO: Continue...
+
+            }
+
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private double priorityFormula(int countDownloads, int countFailures) {
