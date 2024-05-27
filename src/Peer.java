@@ -1060,7 +1060,11 @@ public class Peer {
                 // get this peer's statistics
                 int[] stats = getStatistics(this.tokenID);
 
-                HashSet<String> partitionsOfFileOwned = this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile));
+                // get the partitions this peer owns for this file
+                HashSet<String> partitionsOfFileOwned = new HashSet<>();
+                // check if the peer owns at least one partition of this file, so we don't get exception
+                if (this.filesInNetwork.contains(nextFile))
+                    partitionsOfFileOwned.addAll(this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile)));
 
                 // open connections with all the selected peers and send request
                 int[] threadsFinished = new int[peersToRequestTo.size()]; // check which threads have finished
@@ -1069,12 +1073,14 @@ public class Peer {
                     Thread peerRequestsThread = new Thread(() -> {
                         try {
                             String[] peer = peersToRequestTo.get(finalI);
-                            Socket connection = new Socket(peer[1], Integer.parseInt(peer[2]));
+                            Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]));
                             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
                             // write collaborative function code
                             out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
                             // write file name
                             out.writeObject(nextFile);
+                            // write the peer requesting the file
+                            out.writeInt(this.tokenID);
                             // write the partitions of this file this peer owns
                             out.writeObject(partitionsOfFileOwned);
                             // write the stats of this peer

@@ -79,7 +79,7 @@ public class PeerServerThread extends Thread {
             String filename = (String) in.readObject();
             ObjectOutputStream out = new ObjectOutputStream(this.connection.getOutputStream());
             //peer does not have the requested file
-            if(!filesInNetwork.contains(filename)){
+            if(!this.filesInNetwork.contains(filename)){
                 sendResult(out,0);
             }
 
@@ -94,11 +94,30 @@ public class PeerServerThread extends Thread {
     /**
      * Handle the collaborative Download
      * */
-    private void collaborativeDownloadHandler(){
+    private void collaborativeDownloadHandler() {
         try {
+            // get requesting peer file name
             String fileName = (String) in.readObject();
+            // get requesting peer tokenID
+            int tokenID = in.readInt();
             // get the parts of the files that the user already has (so the other peers don't send already existing files)
-            HashMap<String, ArrayList<String>> partitionsOwnedByPeer = (HashMap<String, ArrayList<String>>) in.readObject();
+            ArrayList<String> partitionsList = new ArrayList<>((HashSet<String>) in.readObject());
+
+            // ask tracker for the info of the requesting peer with this tokenID
+            Socket trackerConnectForPeerInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream trackerOut = new ObjectOutputStream(trackerConnectForPeerInfo.getOutputStream());
+            trackerOut.writeInt(Function.SEND_PEER_INFO.getEncoded());
+            trackerOut.writeInt(tokenID);
+            trackerOut.flush();
+
+            ObjectInputStream trackerIn = new ObjectInputStream(trackerConnectForPeerInfo.getInputStream());
+            // get the peer info
+            String[] peerInfo = (String[]) trackerIn.readObject();
+
+            // create the hashmap from the peer info and the partitions he said he owns for this file
+            HashMap<String, ArrayList<String>> partitionsOwnedByPeer = new HashMap<>();
+            partitionsOwnedByPeer.put(peerInfo[2], partitionsList);
+
             if(this.seederOfFiles.contains(fileName)) {
                 seederServe(fileName, partitionsOwnedByPeer);
             }else {
@@ -175,6 +194,8 @@ public class PeerServerThread extends Thread {
                 }
             }
             partitionsReqByPeer.put(peerName, tempParts);
+
+            // System.out.println("PARTITIONS REQUESTED BY PEER " + peerName + ": " + tempParts);
 
             // if the file name does not exit in the struct, add it and wait for 200ms for more potential requests for this file
             lock.lock();

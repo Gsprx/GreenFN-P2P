@@ -82,6 +82,10 @@ public class TrackerThread extends Thread{
                 case 13:
                     replyUserStatistics();
                     break;
+                case 14:
+                    sendPeerInfo();
+                    break;
+
             }//switch
         }//try
         catch (IOException e) {
@@ -507,6 +511,8 @@ public class TrackerThread extends Thread{
                 out.writeObject(fileOwnersPartitions);
                 //send file owners seeder status
                 out.writeObject(fileOwnersSeederBit);
+                //send total number of parts for this file
+                out.writeInt(this.allFilePartitions.get(filename).size());
                 out.flush();
             }
 
@@ -575,6 +581,21 @@ public class TrackerThread extends Thread{
             }
 
         } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // code 14
+    // send peer information
+    private void sendPeerInfo() {
+        try {
+            int tokenID = in.readInt();
+
+            ObjectOutputStream out = new ObjectOutputStream(this.connection.getOutputStream());
+            out.writeObject(this.activeUsers.get(tokenID));
+            out.flush();
+
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
