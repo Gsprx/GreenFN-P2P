@@ -881,10 +881,10 @@ public class Peer {
                 }
             }
 
-            /*// split the seeding files
+            // split the seeding files
             for (String f : seedingFiles) {
-                splitFile(f, 524288);
-            }*/
+                splitFile(f, Config.SPLIT_ASSEMBLE_SIZE);
+            }
 
             return seedingFiles;
 
@@ -953,7 +953,7 @@ public class Peer {
                 }
 
                 try (BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(partFile))) {
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[Config.SPLIT_ASSEMBLE_SIZE];
                     int bytesRead;
                     while ((bytesRead = bufferedInputStream.read(buffer)) != -1) {
                         bufferedOutputStream.write(buffer, 0, bytesRead);
@@ -967,27 +967,19 @@ public class Peer {
         }
     }
 
-    /**
-     * Look in the fileDownloadList and the shared_directory
-     * @return a random file from fileDownloadList that is not in the shared_directory- or Empty string if you have all the files
-     * */
-    protected String select(){
-        String selectedFile = "";
+    /***/
+    private ArrayList<String> getNonMatchingFiles(){
         try {
             //Files in fileDownloadList
             List<String> filesInFileDownloadList = new ArrayList<>();
-            BufferedReader reader = new BufferedReader(new FileReader(this.shared_directory + File.separator + "fileDownloadList.txt"));
+            BufferedReader reader = reader = new BufferedReader(new FileReader(this.shared_directory + File.separator + "fileDownloadList.txt"));
             String downloadableFile;
             while ((downloadableFile = reader.readLine()) != null) {
                 // Add each line to the list
                 filesInFileDownloadList.add(new String(downloadableFile));
             }
-            System.out.println("filesInFileDownloadList");
-            filesInFileDownloadList.stream().forEach(System.out::println);
             //Files in sharedDirectory
             List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
-            System.out.println("filesInSharedDirectory");
-            filesInSharedDirectory.stream().forEach(System.out::println);
             //Get the non conflicted
             ArrayList<String> nonMatchingFiles = new ArrayList<>();
             for(String file : filesInFileDownloadList){
@@ -995,25 +987,66 @@ public class Peer {
                     nonMatchingFiles.add(file);
                 }
             }
-            System.out.println("nonMatchingFiles");
-            nonMatchingFiles.stream().forEach(System.out::println);
-            //Pick a random of those
+            return nonMatchingFiles;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    /**
+     * Look in the fileDownloadList and the shared_directory
+     * @return a random file from fileDownloadList that is not in the shared_directory- or Empty string if you have all the files
+     * */
+    protected String select(){
+//        try {
+//            //Files in fileDownloadList
+//            List<String> filesInFileDownloadList = new ArrayList<>();
+//            BufferedReader reader = new BufferedReader(new FileReader(this.shared_directory + File.separator + "fileDownloadList.txt"));
+//            String downloadableFile;
+//            while ((downloadableFile = reader.readLine()) != null) {
+//                // Add each line to the list
+//                filesInFileDownloadList.add(new String(downloadableFile));
+//            }
+//            System.out.println("filesInFileDownloadList");
+//            filesInFileDownloadList.stream().forEach(System.out::println);
+//            //Files in sharedDirectory
+//            List<String> filesInSharedDirectory = Files.walk(Paths.get(this.shared_directory)).map(Path::getFileName).map(Path::toString).filter(n->n.endsWith(".txt")||n.endsWith(".png")).collect(Collectors.toList());
+//            System.out.println("filesInSharedDirectory");
+//            filesInSharedDirectory.stream().forEach(System.out::println);
+//            //Get the non conflicted
+//            ArrayList<String> nonMatchingFiles = new ArrayList<>();
+//            for(String file : filesInFileDownloadList){
+//                if(!filesInSharedDirectory.contains(file)){
+//                    nonMatchingFiles.add(file);
+//                }
+//            }
+//            System.out.println("nonMatchingFiles");
+//            nonMatchingFiles.stream().forEach(System.out::println);
+//            //Pick a random of those
+//            if (!nonMatchingFiles.isEmpty()) {
+//                Random random = new Random();
+//                selectedFile = nonMatchingFiles.get(random.nextInt(nonMatchingFiles.size()));
+//            }
+//            //return it or empty
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
+        String selectedFile = "";
+        ArrayList<String> nonMatchingFiles = this.getNonMatchingFiles();
+//        Pick a random of those
             if (!nonMatchingFiles.isEmpty()) {
                 Random random = new Random();
                 selectedFile = nonMatchingFiles.get(random.nextInt(nonMatchingFiles.size()));
             }
-            //return it or empty
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
         return selectedFile;
     }
 
     /**
      * Collaborative Download Method
-     * TODO: Maybe replace downloadFile with this completely
      */
     private void collaborativeDownload() {
+        ArrayList<String> nonMatchingFiles = this.getNonMatchingFiles();
+        int[] fileInspected = new int[nonMatchingFiles.size()];
+
         while (true) {
             String nextFile = select();
             if (nextFile.isEmpty()) {
@@ -1022,13 +1055,18 @@ public class Peer {
             }
             System.out.println("\nChoosing file: " + nextFile);
 
+            //We inspect this file (either we are going to download it completely or some parts of it)
+            fileInspected[nonMatchingFiles.indexOf(nextFile)] = 1;
+
             ArrayList<Object> detailsResult = details(nextFile);
             if (detailsResult == null) {
                 System.out.println("There are no online peers with the file " + nextFile);
+                if(Arrays.stream(fileInspected).sum()==nonMatchingFiles.size()){
+                    System.out.println("We tried to download every available file :)");
+                    break;
+                }
                 continue;
             }
-
-            // TODO: if from the parts the available peers own we are not missing any, then bye bye, continue
 
             // get file owners
             ArrayList<String[]> peersOwningFile = (ArrayList<String[]>) detailsResult.get(0);
@@ -1061,6 +1099,8 @@ public class Peer {
                     peersToRequestTo.addAll(peersOwningFile);
                 }
 
+                String[] myInfo = getName(this.tokenID);
+                peersToRequestTo.remove(myInfo);
                 // get this peer's statistics
                 int[] stats = getStatistics(this.tokenID);
 
@@ -1084,7 +1124,7 @@ public class Peer {
                             // write file name
                             out.writeObject(nextFile);
                             // write the peer requesting the file
-                            out.writeObject(getName(this.tokenID));
+                            out.writeObject(getName(this.tokenID)[2]);
                             // write the partitions of this file this peer owns
                             out.writeObject(partitionsOfFileOwned);
                             // write the stats of this peer
@@ -1097,6 +1137,7 @@ public class Peer {
                                 System.out.println(peer[0] + " denied request.");
                             } else {
                                 String nameOfPartition = (String) in.readObject();
+                                int sendBackPartitionCode = in.readInt();
                                 // download file
                                 downloadFile(nameOfPartition, in);
                                 // notify tracker
@@ -1115,7 +1156,6 @@ public class Peer {
                                     this.partitionsByPeer.put(peer[2], value);
                                 }
                                 // code for sending back one of this peer's partitions (if the other peer requested for it)
-                                int sendBackPartitionCode = in.readInt();
                                 if (sendBackPartitionCode == 1) {
                                     // get the parts the other peer owns
                                     HashSet<String> partitionsOwnedByOtherPeer = (HashSet<String>) in.readObject();
@@ -1129,7 +1169,9 @@ public class Peer {
                                     // choose the part to send
                                     String partNameToSend = candidatePartsToSend.get(new Random().nextInt(candidatePartsToSend.size()));
                                     out.writeObject(partNameToSend);
-                                    // TODO: send the contents of this part
+                                    out.flush();
+                                    sendFile(out, partNameToSend);
+                                    // TODO: send the contents of this part - TEST IT
                                 } else {
                                     System.out.println("OK NIBBA, I WILL NOT SEND BACK ANY FILES");
                                 }
@@ -1154,13 +1196,11 @@ public class Peer {
                 // TODO: if from the parts the available peers own we are not missing any, then bye bye, break
 
                 // check if the file is whole
-                if (this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile)).size() == totalNumberOfParts) {
+                if (this.filesInNetwork.contains(nextFile) && this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile)).size() == totalNumberOfParts) {
                     fileAssembled = true;
                     assembleFile(nextFile, totalNumberOfParts);
                 }
             }
-
-            // TODO: if we went through all the files and we couldn't download some, then break (because we will end up in an infinite loop)
         }
     }
 
@@ -1182,7 +1222,7 @@ public class Peer {
 
     }
 
-    private String getName(int tokenID) {
+    private String[] getName(int tokenID) {
         try {
             // ask tracker for the info of the requesting peer with this tokenID
             Socket trackerConnectForPeerInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
@@ -1194,8 +1234,42 @@ public class Peer {
             ObjectInputStream trackerIn = new ObjectInputStream(trackerConnectForPeerInfo.getInputStream());
             // get the peer info
             String[] peerInfo = (String[]) trackerIn.readObject();
-            return peerInfo[2];
+            return peerInfo;
         } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    /**
+     * Option | Send file to peer.
+     */
+    private void sendFile(ObjectOutputStream out, String filename) {
+        //initiate basic stream details
+        String fileToSendName = this.shared_directory +File.separator+filename;
+        File fileToSend = new File(fileToSendName);
+        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / Config.DOWNLOAD_SIZE);
+
+        //use try-with-resources block to automatically close streams
+        try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
+             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
+
+            //send number of parts to be sent in total
+            out.writeInt(numberOfPartsToSend);
+            out.flush();
+
+            //create byte array of the file partition
+            byte[] fileBytes = new byte[Config.DOWNLOAD_SIZE];
+
+
+            //this loop will keep on reading partitions of partSize and send them to the receiver peer
+            //until the byte stream has nothing more to read.
+            //read method returns -1 when there are no more bytes to be read
+            int i;
+            while ((i = bufferedInputStream.read(fileBytes)) != -1) {
+                //the read bytes are placed into the byte array fileBytes and sent to the receiver peer
+                out.write(fileBytes, 0, i);
+                out.flush();
+            }
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }

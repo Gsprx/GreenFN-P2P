@@ -229,11 +229,11 @@ public class PeerServerThread extends Thread {
                 // send name of the part
                 outputStream.writeObject(selectedPart);
                 outputStream.flush();
-                // send the file
-                sendFile(outputStream, selectedPart);
                 // send that we don't want to receive a file back
                 outputStream.writeInt(0);
                 outputStream.flush();
+                // send the file
+                sendFile(outputStream, selectedPart);
                 //Send "DENIED" to the rest
                 involvedPeers.remove(selectedPeer);
                 for(Socket socket : involvedPeers){
