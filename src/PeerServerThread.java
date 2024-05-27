@@ -99,28 +99,16 @@ public class PeerServerThread extends Thread {
             // get requesting peer file name
             String fileName = (String) in.readObject();
             // get requesting peer tokenID
-            int tokenID = in.readInt();
+            String peerUsername = (String) in.readObject();
             // get the parts of the files that the user already has (so the other peers don't send already existing files)
             ArrayList<String> partitionsList = new ArrayList<>((HashSet<String>) in.readObject());
-
-            // ask tracker for the info of the requesting peer with this tokenID
-            Socket trackerConnectForPeerInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
-            ObjectOutputStream trackerOut = new ObjectOutputStream(trackerConnectForPeerInfo.getOutputStream());
-            trackerOut.writeInt(Function.SEND_PEER_INFO.getEncoded());
-            trackerOut.writeInt(tokenID);
-            trackerOut.flush();
-
-            ObjectInputStream trackerIn = new ObjectInputStream(trackerConnectForPeerInfo.getInputStream());
-            // get the peer info
-            String[] peerInfo = (String[]) trackerIn.readObject();
-
             // create the hashmap from the peer info and the partitions he said he owns for this file
             HashMap<String, ArrayList<String>> partitionsOwnedByPeer = new HashMap<>();
-            partitionsOwnedByPeer.put(peerInfo[2], partitionsList);
+            partitionsOwnedByPeer.put(peerUsername, partitionsList);
 
             if(this.seederOfFiles.contains(fileName)) {
                 seederServe(fileName, partitionsOwnedByPeer);
-            }else {
+            } else {
                 collaborativeDownload(fileName, partitionsOwnedByPeer);
             }
         } catch (IOException | ClassNotFoundException e) {
@@ -131,7 +119,7 @@ public class PeerServerThread extends Thread {
     /**
      * Option | Send file to peer.
      */
-    private void sendFile(ObjectOutputStream out, String filename){
+    private void sendFile(ObjectOutputStream out, String filename) {
         //initiate basic stream details
         String fileToSendName = this.shared_directory +File.separator+filename;
         File fileToSend = new File(fileToSendName);
@@ -195,7 +183,7 @@ public class PeerServerThread extends Thread {
             }
             partitionsReqByPeer.put(peerName, tempParts);
 
-            // System.out.println("PARTITIONS REQUESTED BY PEER " + peerName + ": " + tempParts);
+            System.out.println("PARTITIONS REQUESTED BY PEER " + peerName + ": " + tempParts);
 
             // if the file name does not exit in the struct, add it and wait for 200ms for more potential requests for this file
             lock.lock();
@@ -238,7 +226,14 @@ public class PeerServerThread extends Thread {
                 //Send "OK" code - this can be removed
                 outputStream.writeInt(1);
                 outputStream.flush();
-                sendFile(outputStream,selectedPart);
+                // send name of the part
+                outputStream.writeObject(selectedPart);
+                outputStream.flush();
+                // send the file
+                sendFile(outputStream, selectedPart);
+                // send that we don't want to receive a file back
+                outputStream.writeInt(0);
+                outputStream.flush();
                 //Send "DENIED" to the rest
                 involvedPeers.remove(selectedPeer);
                 for(Socket socket : involvedPeers){
@@ -315,15 +310,15 @@ public class PeerServerThread extends Thread {
                         ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
                         //Retrieve the ArrayList of file partitions requested of the random peer
                         ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(socket);
-                        //Select a random partition from the ArrayList
-                        String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
-                        if (!this.filesInNetwork.contains(selectedPart)) {//todo with partitionsInNetwork
-                            //Send "OK" code - this can be removed
-                            outputStream.writeObject("OK");
+                        // if we don't have any of the parts the other peer requested
+                        if (requestedPartitions.isEmpty()) {
+                            outputStream.writeInt(0);
                             outputStream.flush();
                         } else {
+                            // Select a random partition from the ArrayList
+                            String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
                             //Send "OK" code - this can be removed
-                            outputStream.writeObject("OK");
+                            outputStream.writeInt(1);
                             outputStream.flush();
                             //Send the selected part
                             sendFile(outputStream,selectedPart);

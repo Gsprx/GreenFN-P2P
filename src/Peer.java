@@ -257,7 +257,7 @@ public class Peer {
                     break;
                 // option 4: simple download
                 case "4":
-                    downloadFile();
+                    simpleDownload();
                     break;
                 // option 4: collaborative download
                 case "5":
@@ -459,7 +459,7 @@ public class Peer {
     /**
      * Option 4 | Simple download
      * */
-    private void downloadFile(){
+    private void simpleDownload(){
         // get file name
         System.out.println("\n|Download File|");
         System.out.print("File name: ");
@@ -554,34 +554,7 @@ public class Peer {
                 }
                 // result 1 = file exists
                 else {
-                    String pathToStore = this.shared_directory + File.separator + fileName;
-                    FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
-                    // Delete existing data from the file
-                    fileOutputStream.getChannel().truncate(0);
-                    fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
-                    //Open to write in the file
-                    fileOutputStream = new FileOutputStream(pathToStore, true);
-                    BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
-                    //read file parts to be received
-                    int fileParts = in.readInt();
-                    byte[] fileBytes;
-                    for (int i=0; i<fileParts; i++){
-                        fileBytes = new byte[Config.DOWNLOAD_SIZE];
-                        int bytesRead;
-                        while ((bytesRead = in.read(fileBytes)) != -1) {
-                            //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
-                            bufferedOutputStream.write(fileBytes, 0, bytesRead);
-                        }
-                        bufferedOutputStream.flush();
-                    }
-                    bufferedOutputStream.close();
-                    // close
-                    out.close();
-                    in.close();
-                    downloadSocket.close();
-
-                    // notify tracker for successful download
-                    System.out.println("File received successfully.");
+                    downloadFile(fileName, in);
                     notifyTracker(1, currentPeer, fileName);
                     this.filesInNetwork.add(fileName);
                     downloaded = true;
@@ -594,6 +567,37 @@ public class Peer {
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private void downloadFile(String fileName, ObjectInputStream in) {
+        try {
+            String pathToStore = this.shared_directory + File.separator + fileName;
+            FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
+            // Delete existing data from the file
+            fileOutputStream.getChannel().truncate(0);
+            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
+            //Open to write in the file
+            fileOutputStream = new FileOutputStream(pathToStore, true);
+            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+            //read file parts to be received
+            int fileParts = in.readInt();
+            byte[] fileBytes;
+            for (int i=0; i<fileParts; i++){
+                fileBytes = new byte[Config.DOWNLOAD_SIZE];
+                int bytesRead;
+                while ((bytesRead = in.read(fileBytes)) != -1) {
+                    //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
+                    bufferedOutputStream.write(fileBytes, 0, bytesRead);
+                }
+                bufferedOutputStream.flush();
+            }
+            bufferedOutputStream.close();
+
+            // notify tracker for successful download
+            System.out.println("File received successfully.");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -1080,7 +1084,7 @@ public class Peer {
                             // write file name
                             out.writeObject(nextFile);
                             // write the peer requesting the file
-                            out.writeInt(this.tokenID);
+                            out.writeObject(getName(this.tokenID));
                             // write the partitions of this file this peer owns
                             out.writeObject(partitionsOfFileOwned);
                             // write the stats of this peer
@@ -1093,10 +1097,23 @@ public class Peer {
                                 System.out.println(peer[0] + " denied request.");
                             } else {
                                 String nameOfPartition = (String) in.readObject();
-                                // TODO: read the contents of the file and write to shared_directory
-                                // TODO: notify tracker and corresponding data structures in peer
+                                // download file
+                                downloadFile(nameOfPartition, in);
+                                // notify tracker
+                                notifyTracker(1, peer, nameOfPartition);
+                                // update structs
+                                this.filesInNetwork = peersFilesInNetwork();
+                                this.partitionsInNetwork = peersPartitionsInNetwork();
                                 // update the partitions sent by the peer we downloaded from
-                                this.partitionsByPeer.get(peer[0]).add(nameOfPartition);
+                                // if we have downloaded from this peer before, then just add the new partition we just downloaded
+                                if (this.partitionsByPeer.containsKey(peer[2]))
+                                    this.partitionsByPeer.get(peer[2]).add(nameOfPartition);
+                                // if we haven't downloaded from this peer before then create a new entry in the struct
+                                else {
+                                    ArrayList<String> value = new ArrayList<>();
+                                    value.add(nameOfPartition);
+                                    this.partitionsByPeer.put(peer[2], value);
+                                }
                                 // code for sending back one of this peer's partitions (if the other peer requested for it)
                                 int sendBackPartitionCode = in.readInt();
                                 if (sendBackPartitionCode == 1) {
@@ -1113,6 +1130,8 @@ public class Peer {
                                     String partNameToSend = candidatePartsToSend.get(new Random().nextInt(candidatePartsToSend.size()));
                                     out.writeObject(partNameToSend);
                                     // TODO: send the contents of this part
+                                } else {
+                                    System.out.println("OK NIBBA, I WILL NOT SEND BACK ANY FILES");
                                 }
                             }
                             threadsFinished[finalI] = 1;
@@ -1161,6 +1180,24 @@ public class Peer {
             throw new RuntimeException(e);
         }
 
+    }
+
+    private String getName(int tokenID) {
+        try {
+            // ask tracker for the info of the requesting peer with this tokenID
+            Socket trackerConnectForPeerInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream trackerOut = new ObjectOutputStream(trackerConnectForPeerInfo.getOutputStream());
+            trackerOut.writeInt(Function.SEND_PEER_INFO.getEncoded());
+            trackerOut.writeInt(tokenID);
+            trackerOut.flush();
+
+            ObjectInputStream trackerIn = new ObjectInputStream(trackerConnectForPeerInfo.getInputStream());
+            // get the peer info
+            String[] peerInfo = (String[]) trackerIn.readObject();
+            return peerInfo[2];
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static void main(String[] args) {

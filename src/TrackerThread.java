@@ -367,7 +367,7 @@ public class TrackerThread extends Thread{
             //identify username of sender
             String senderUsername = (String) in.readObject();
 
-            //add recipient to list of owners of the file using the merge function
+            // add recipient to list of owners of the file using the merge function
             availablePartitions.merge(filePartition, new HashSet<>(){{add(tokenID);}}, (oldList, newList) -> {
                 oldList.addAll(newList);
                 return oldList;
