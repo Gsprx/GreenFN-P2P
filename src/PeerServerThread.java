@@ -25,11 +25,12 @@ public class PeerServerThread extends Thread {
     private ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer;
     // Map of socket connections -> peer username (socket12.obj, "peer1")
     private ConcurrentHashMap<Socket, String> peerUsernamesByConnection;
+    private int tokenID;
 
     public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, ArrayList<HashSet<String>> partitionsInNetwork,
                             ArrayList<String> seederOfFiles, String shared_directory, HashMap<String, String> threadByFile,
                             HashMap<String, HashMap<Socket, ArrayList<String>>> peerPartitionsByThread,
-                            ReentrantLock lock, ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer) {
+                            ReentrantLock lock, ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer, int tokenID) {
         //handle connection
         this.filesInNetwork = filesInNetwork;
         this.partitionsInNetwork = partitionsInNetwork;
@@ -41,6 +42,7 @@ public class PeerServerThread extends Thread {
         this.lock = lock;
         this.partitionsByPeer = partitionsByPeer;
         this.peerUsernamesByConnection = new ConcurrentHashMap<>();
+        this.tokenID = tokenID;
         try {
             in = new ObjectInputStream(connection.getInputStream());
         } catch (IOException e) {
@@ -471,9 +473,9 @@ public class PeerServerThread extends Thread {
                 }
             }
         }
-
+        //check if we are missing any segments for this file using the tracker
         //request missing segments from max peer
-        //check if we are missing any segments for this file
+
 
 
 

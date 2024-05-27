@@ -204,7 +204,7 @@ public class Peer {
                         Socket inConnection = server.accept();
                         Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork,
                                 this.seederOfFiles, this.shared_directory, this.threadByFile,
-                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer);
+                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer, tokenID);
                         t.start();
                     }
                 } catch (IOException e) {
