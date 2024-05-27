@@ -246,10 +246,23 @@ public class PeerServerThread extends Thread {
     }
 
     /***/
-    private void collaborativeDownload(String fileName, HashMap<String, ArrayList<String>> partitionsReqByPeer) {
+    private void collaborativeDownload(String fileName, HashMap<String, ArrayList<String>> partitionsOwnedByPeer) {
         try {
             // get the specific thread name
             String threadName = Thread.currentThread().getName();
+            // get the requested partitions (all partitions - partitionsOwnedByPeer)
+            HashMap<String, ArrayList<String>> partitionsReqByPeer = new HashMap<>();
+            ArrayList<String> tempParts = new ArrayList<>();
+            String peerName = "";
+            for (String part : this.partitionsInNetwork.get(this.filesInNetwork.indexOf(fileName))) {
+                for (Map.Entry<String, ArrayList<String>> entry : partitionsOwnedByPeer.entrySet()) {
+                    peerName = entry.getKey();
+                    ArrayList<String> tab = entry.getValue();
+                    if (!tab.contains(part))
+                        tempParts.add(part);
+                }
+            }
+            partitionsReqByPeer.put(peerName, tempParts);
 
             lock.lock();
             if (!this.threadByFile.containsKey(fileName)) {
