@@ -1079,13 +1079,17 @@ public class Peer {
             while (!fileAssembled) {
                 ArrayList<String[]> peersToRequestTo = new ArrayList<>();
 
+                // get this peer's info and statistics
+                String[] myInfo = getName(this.tokenID);
+                int[] myStats = getStatistics(this.tokenID);
+
                 // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
                 if (peersOwningFile.size() > 4) {
                     int requestToSeederCounter = 0; // we want at most 2 seeders
                     while (peersToRequestTo.size() < 4) {
                         int randIndex = new Random().nextInt(peersOwningFile.size());
-                        // if we've already selected this peer then skip
-                        if (peersToRequestTo.contains(peersOwningFile.get(randIndex))) continue;
+                        // if we've already selected this peer or its ourselves then skip
+                        if (peersToRequestTo.contains(peersOwningFile.get(randIndex)) || peersOwningFile.get(randIndex)[2].equals(myInfo[2])) continue;
                         // if the index shows to a seeder and the counter says we haven't selected more than 2 seeders yet,
                         // then add him to the peers we are going to send the request
                         if (peersOwningFileSeederBit.get(randIndex) && requestToSeederCounter < 2) {
@@ -1096,13 +1100,17 @@ public class Peer {
                         }
                     }
                 } else { // if the peers owning parts of this file are 4 or less, then select them all
+                    ArrayList<String[]> toBeRemoved = new ArrayList<>();
                     peersToRequestTo.addAll(peersOwningFile);
+                    //Remove self from peersToRequestTo
+                    for(String[] peer : peersToRequestTo){
+                        if(peer[2].equals(myInfo[2])){
+                            toBeRemoved.add(peer);
+                        }
+                    }
+                    peersToRequestTo.removeAll(toBeRemoved);
+                    //We do it this way because String[] equals looks at memory
                 }
-
-                String[] myInfo = getName(this.tokenID);
-                peersToRequestTo.remove(myInfo);
-                // get this peer's statistics
-                int[] stats = getStatistics(this.tokenID);
 
                 // get the partitions this peer owns for this file
                 HashSet<String> partitionsOfFileOwned = new HashSet<>();
@@ -1124,17 +1132,17 @@ public class Peer {
                             // write file name
                             out.writeObject(nextFile);
                             // write the peer requesting the file
-                            out.writeObject(getName(this.tokenID)[2]);
+                            out.writeObject(myInfo[2]);
                             // write the partitions of this file this peer owns
                             out.writeObject(partitionsOfFileOwned);
-                            // write the stats of this peer
-                            out.writeObject(stats);
+                            // write the myStats of this peer
+                            out.writeObject(myStats);
                             out.flush();
 
                             ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
                             int result = in.readInt();
                             if (result == 0) {
-                                System.out.println(peer[0] + " denied request.");
+                                System.out.println(peer[2] + " denied request.");
                             } else {
                                 String nameOfPartition = (String) in.readObject();
                                 int sendBackPartitionCode = in.readInt();
