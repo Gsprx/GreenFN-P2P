@@ -314,13 +314,19 @@ public class PeerServerThread extends Thread {
                         ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(socket);
                         // if we don't have any of the parts the other peer requested
                         if (requestedPartitions.isEmpty()) {
-                            outputStream.writeInt(0);
+                            outputStream.writeInt(-1);
                             outputStream.flush();
                         } else {
                             // Select a random partition from the ArrayList
                             String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
                             //Send "OK" code - this can be removed
                             outputStream.writeInt(1);
+                            outputStream.flush();
+                            // send name of the part
+                            outputStream.writeObject(selectedPart);
+                            outputStream.flush();
+                            //Send no file back TODO: change it to always send back
+                            outputStream.writeInt(0);
                             outputStream.flush();
                             //Send the selected part
                             sendFile(outputStream,selectedPart);

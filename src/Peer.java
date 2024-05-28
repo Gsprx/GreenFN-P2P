@@ -585,14 +585,18 @@ public class Peer {
             byte[] fileBytes;
             for (int i=0; i<fileParts; i++){
                 fileBytes = new byte[Config.DOWNLOAD_SIZE];
-                int bytesRead;
-                while ((bytesRead = in.read(fileBytes)) != -1) {
+                int bytesRead = 0;
+                int counterTemp = 0;
+                while ((bytesRead = in.read(fileBytes, bytesRead, Config.DOWNLOAD_SIZE - bytesRead)) != -1) {
                     //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
+                    /*counterTemp += 1024;
+                    System.out.println(bytesRead + " count: " + counterTemp);*/
                     bufferedOutputStream.write(fileBytes, 0, bytesRead);
                 }
                 bufferedOutputStream.flush();
             }
             bufferedOutputStream.close();
+            fileOutputStream.close();
 
             // notify tracker for successful download
             System.out.println("File received successfully.");
@@ -960,6 +964,7 @@ public class Peer {
                     }
                 }
             }
+            bufferedOutputStream.close();
 
             System.out.println("File assembly completed successfully.");
         } catch (IOException e) {
@@ -1044,6 +1049,10 @@ public class Peer {
      * Collaborative Download Method
      */
     private void collaborativeDownload() {
+        // get this peer's info and statistics
+        String[] myInfo = getName(this.tokenID);
+        int[] myStats = getStatistics(this.tokenID);
+
         ArrayList<String> nonMatchingFiles = this.getNonMatchingFiles();
         int[] fileInspected = new int[nonMatchingFiles.size()];
 
@@ -1056,7 +1065,11 @@ public class Peer {
             System.out.println("\nChoosing file: " + nextFile);
 
             //We inspect this file (either we are going to download it completely or some parts of it)
-            fileInspected[nonMatchingFiles.indexOf(nextFile)] = 1;
+            // if we already inspected this file then skip it
+            if (fileInspected[nonMatchingFiles.indexOf(nextFile)] != 1)
+                fileInspected[nonMatchingFiles.indexOf(nextFile)] = 1;
+            else
+                continue;
 
             ArrayList<Object> detailsResult = details(nextFile);
             if (detailsResult == null) {
@@ -1070,18 +1083,25 @@ public class Peer {
 
             // get file owners
             ArrayList<String[]> peersOwningFile = (ArrayList<String[]>) detailsResult.get(0);
-            /*ArrayList<int[]> peersOwningFileStats = (ArrayList<int[]>) detailsResult.get(1);
-            ArrayList<ArrayList<String>> peersOwningFilePartitions = (ArrayList<ArrayList<String>>) detailsResult.get(2);*/
+            //ArrayList<int[]> peersOwningFileStats = (ArrayList<int[]>) detailsResult.get(1);
+            //ArrayList<ArrayList<String>> peersOwningFilePartitions = (ArrayList<ArrayList<String>>) detailsResult.get(2);
             ArrayList<Boolean> peersOwningFileSeederBit = (ArrayList<Boolean>) detailsResult.get(3);
             int totalNumberOfParts = (int) detailsResult.get(4);
 
             boolean fileAssembled = false;
             while (!fileAssembled) {
                 ArrayList<String[]> peersToRequestTo = new ArrayList<>();
-
-                // get this peer's info and statistics
-                String[] myInfo = getName(this.tokenID);
-                int[] myStats = getStatistics(this.tokenID);
+                // we use this to keep track of the answers the peers give us
+                // if we finally ask all the peers that own parts of this file and conclude that no one has a useful part
+                // for us, then stop trying to download this file
+                int[] peerOwningFileNoUsefulPartition = new int[peersOwningFile.size()];
+                // mark ourselves with 1 already, of course
+                for (int p = 0; p < peersOwningFile.size(); p++) {
+                    if (peersOwningFile.get(p)[2].equals(myInfo[2])) {
+                        peerOwningFileNoUsefulPartition[p] = 1;
+                        break;
+                    }
+                }
 
                 // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
                 if (peersOwningFile.size() > 4) {
@@ -1124,6 +1144,7 @@ public class Peer {
                     int finalI = i;
                     Thread peerRequestsThread = new Thread(() -> {
                         try {
+                            System.out.println(Thread.currentThread().getName() + " I: " + finalI);
                             String[] peer = peersToRequestTo.get(finalI);
                             Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]));
                             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
@@ -1143,6 +1164,19 @@ public class Peer {
                             int result = in.readInt();
                             if (result == 0) {
                                 System.out.println(peer[2] + " denied request.");
+                            } else if (result == -1) {
+                                // if the peer responds saying he doesn't own any useful files for us, then mark him as
+                                // useless
+                                System.out.println(peer[2] + "(" + Thread.currentThread().getName() + ") doesn't have any useful partitions for file " + nextFile);
+                                int indexOfPeerOwningFile = -1;
+                                for (int p = 0; p < peersOwningFile.size(); p++) {
+                                    if (peersOwningFile.get(p)[2].equals(peer[2])) {
+                                        indexOfPeerOwningFile = p;
+                                        break;
+                                    }
+                                }
+                                peerOwningFileNoUsefulPartition[indexOfPeerOwningFile] = 1;
+
                             } else {
                                 String nameOfPartition = (String) in.readObject();
                                 int sendBackPartitionCode = in.readInt();
@@ -1192,7 +1226,7 @@ public class Peer {
                     peerRequestsThread.start();
                 }
                 // wait for all the threads to finish before moving on
-                while (Arrays.stream(threadsFinished).sum() < peersToRequestTo.size()) {
+                while (Arrays.stream(threadsFinished).sum() < threadsFinished.length) {
                     try {
                         TimeUnit.MILLISECONDS.sleep(100);
                     } catch (InterruptedException e) {
@@ -1202,6 +1236,10 @@ public class Peer {
 
                 // TODO: if everyone rejects we call details from tracker after 500ms (from the last denial)
                 // TODO: if from the parts the available peers own we are not missing any, then bye bye, break
+                if (Arrays.stream(peerOwningFileNoUsefulPartition).sum() == peerOwningFileNoUsefulPartition.length) {
+                    System.out.println("Asked all peers for file " + nextFile + " and no one has the partitions we need :(");
+                    break;
+                }
 
                 // check if the file is whole
                 if (this.filesInNetwork.contains(nextFile) && this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile)).size() == totalNumberOfParts) {
@@ -1222,7 +1260,11 @@ public class Peer {
             out.flush();
 
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            return (int[]) in.readObject();
+            int[] result = (int[]) in.readObject();
+            in.close();
+            out.close();
+            socket.close();
+            return result;
 
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -1242,6 +1284,9 @@ public class Peer {
             ObjectInputStream trackerIn = new ObjectInputStream(trackerConnectForPeerInfo.getInputStream());
             // get the peer info
             String[] peerInfo = (String[]) trackerIn.readObject();
+            trackerIn.close();
+            trackerOut.close();
+            trackerConnectForPeerInfo.close();
             return peerInfo;
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
