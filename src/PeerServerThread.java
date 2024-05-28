@@ -237,11 +237,8 @@ public class PeerServerThread extends Thread {
                 outputStream.flush();
                 // send the file
                 sendFile(outputStream, selectedPart);
-                try {
-                    TimeUnit.MILLISECONDS.sleep(200);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+                // TODO: wait until the other peer has read all the contents of the file, and then we can close the socket
+                // TODO: without any problems
                 //Send "DENIED" to the rest
                 involvedPeers.remove(selectedPeer);
                 for(Socket socket : involvedPeers){
@@ -335,7 +332,9 @@ public class PeerServerThread extends Thread {
                             outputStream.writeInt(0);
                             outputStream.flush();
                             //Send the selected part
-                            sendFile(outputStream,selectedPart);
+                            sendFile(outputStream, selectedPart);
+                            // TODO: wait until the other peer has read all the contents of the file, and then we can close the socket
+                            // TODO: without any problems
                         }
                     }
                 } else {

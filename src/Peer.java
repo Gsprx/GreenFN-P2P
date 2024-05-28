@@ -587,7 +587,8 @@ public class Peer {
                 System.out.println("There are no other available partitions for any file");
                 break;
             }
-            if(Arrays.stream(fileInspected).sum()==nonMatchingFiles.size()){
+            // if we have inspected all the files at least once then break
+            if(Arrays.stream(fileInspected).sum() == nonMatchingFiles.size()){
                 System.out.println("We tried to download every available file :)");
                 break;
             }
@@ -1260,7 +1261,7 @@ public class Peer {
 //            throw new RuntimeException(e);
 //        }
         String selectedFile = "";
-        ArrayList<String> nonMatchingFiles = this.getNonMatchingFiles();
+        ArrayList<String> nonMatchingFiles = getNonMatchingFiles();
 //        Pick a random of those
             if (!nonMatchingFiles.isEmpty()) {
                 Random random = new Random();
