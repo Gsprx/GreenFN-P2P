@@ -237,6 +237,11 @@ public class PeerServerThread extends Thread {
                 outputStream.flush();
                 // send the file
                 sendFile(outputStream, selectedPart);
+                try {
+                    TimeUnit.MILLISECONDS.sleep(200);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
                 //Send "DENIED" to the rest
                 involvedPeers.remove(selectedPeer);
                 for(Socket socket : involvedPeers){

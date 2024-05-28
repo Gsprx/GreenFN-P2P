@@ -578,13 +578,17 @@ public class Peer {
         String[] myInfo = getName(this.tokenID);
         int[] myStats = getStatistics(this.tokenID);
 
-        ArrayList<String> nonMatchingFiles = this.getNonMatchingFiles();
+        ArrayList<String> nonMatchingFiles = getNonMatchingFiles();
         int[] fileInspected = new int[nonMatchingFiles.size()];
 
         while (true) {
             String nextFile = select();
             if (nextFile.isEmpty()) {
                 System.out.println("There are no other available partitions for any file");
+                break;
+            }
+            if(Arrays.stream(fileInspected).sum()==nonMatchingFiles.size()){
+                System.out.println("We tried to download every available file :)");
                 break;
             }
             System.out.println("\nChoosing file: " + nextFile);
@@ -599,10 +603,6 @@ public class Peer {
             ArrayList<Object> detailsResult = details(nextFile);
             if (detailsResult == null) {
                 System.out.println("There are no online peers with the file " + nextFile);
-                if(Arrays.stream(fileInspected).sum()==nonMatchingFiles.size()){
-                    System.out.println("We tried to download every available file :)");
-                    break;
-                }
                 continue;
             }
 
@@ -835,12 +835,9 @@ public class Peer {
             byte[] fileBytes;
             for (int i=0; i<fileParts; i++){
                 fileBytes = new byte[Config.DOWNLOAD_SIZE];
-                int bytesRead = 0;
-                int counterTemp = 0;
-                while ((bytesRead = in.read(fileBytes, bytesRead, Config.DOWNLOAD_SIZE - bytesRead)) != -1) {
+                int bytesRead;
+                while ((bytesRead = in.read(fileBytes)) != -1) {
                     //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
-                    /*counterTemp += 1024;
-                    System.out.println(bytesRead + " count: " + counterTemp);*/
                     bufferedOutputStream.write(fileBytes, 0, bytesRead);
                 }
                 bufferedOutputStream.flush();
