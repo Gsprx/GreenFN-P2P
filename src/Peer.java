@@ -31,6 +31,7 @@ public class Peer {
     boolean isPeerOnline;
     ServerSocket server;
     private boolean isSeeder;
+    public static String lastUsedUsername;
 
     // Map of requested files and the initial thread that got the request
     private HashMap<String, String> threadByFile;
@@ -196,6 +197,8 @@ public class Peer {
         if (response != 0) {
             isPeerOnline = true;
             this.tokenID = response;
+            lastUsedUsername = username;
+
             // start the thread for the server
             Thread runServer = new Thread(()-> {
                 try {

@@ -350,7 +350,7 @@ public class PeerServerThread extends Thread {
                             bestPeerFormula(fileName, threadName);
                             break;
                         case 2:
-                            peerWithMostSegmentsSent(fileName);
+                            peerWithMostSegmentsSent(fileName, partitionsRequestsPerPeer);
                             break;
                         default:
                             break;
@@ -418,7 +418,7 @@ public class PeerServerThread extends Thread {
         // TODO: Send appropriate file part and request one as well (if needed)
     }
 
-    private void peerWithMostSegmentsSent(String filename) {
+    private void peerWithMostSegmentsSent(String filename, HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer) {
         //find all peers who requested segments of the specific file - filename
         HashSet<Socket> peerRequesters = new HashSet<>();
         
@@ -526,6 +526,7 @@ public class PeerServerThread extends Thread {
 
             boolean missingSegments = false;
             int fileIndex = -1;
+            HashSet<String> existingPartitions = new HashSet<>();
 
             //scan relevant entries in partitions in network datastruct
             for(int i =0; i<filesInNetwork.size(); i++){
@@ -534,14 +535,16 @@ public class PeerServerThread extends Thread {
                     if(partitionsInNetwork.get(i).size()<maxSegments) {
                         missingSegments = true;
                     }
+                    //create a list with all our existing partitions
+                    existingPartitions.addAll(partitionsInNetwork.get(fileIndex));
                 }
             }
 
             if(missingSegments) {
                 //keep all known segment names in a set to compare with local segments available
                 HashSet<String> segmentNames = new HashSet<>();
-                for (int i = 0; i < fileOwnersPartitions.size(); i++) {
-                    segmentNames.addAll(fileOwnersPartitions.get(i));
+                for (ArrayList<String> fileOwnersPartition : fileOwnersPartitions) {
+                    segmentNames.addAll(fileOwnersPartition);
                 }
 
                 //create a list with all the missing partitions
@@ -551,16 +554,33 @@ public class PeerServerThread extends Thread {
                         missingPartitions.add(partition);
                     }
                 }
+                //find the requested partitions by the max peer
+                ArrayList<String> maxPeerRequestedParts = partitionsRequestsPerPeer.get(maxPeer);
+
+                //select a random requested partition to send to max peer
+                int randIndex = ThreadLocalRandom.current().nextInt(0,maxPeerRequestedParts.size());
+                String selectedPartitionSend = maxPeerRequestedParts.get(randIndex);
+
+                //send this partition to the max peer
+                sendFile(new ObjectOutputStream(maxPeer.getOutputStream()), selectedPartitionSend);
+                System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " sent a file (" + selectedPartitionSend + ")" + " to max peer: " + peerUsernamesByConnection.get(maxPeer));
+
 
                 //select a random partition to request
-                int randIndex = ThreadLocalRandom.current().nextInt(0,missingPartitions.size());
-                String selectedPartition = missingPartitions.get(randIndex);
+                randIndex = ThreadLocalRandom.current().nextInt(0,missingPartitions.size());
+                String selectedPartitionRequest = missingPartitions.get(randIndex);
 
                 //request missing segments from max peer
                 out = new ObjectOutputStream(maxPeer.getOutputStream());
+                //collabDownload code
                 out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
-                //TODO: Continue...
-
+                //requested partition name
+                out.writeObject(selectedPartitionRequest);
+                //username
+                out.writeObject(Peer.lastUsedUsername);
+                //our existing partitions
+                out.writeObject(existingPartitions);
+                System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " requested a file (" + selectedPartitionRequest + ")" + " from max peer: " + peerUsernamesByConnection.get(maxPeer));
             }
 
         } catch (IOException | ClassNotFoundException e) {
