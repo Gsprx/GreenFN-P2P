@@ -41,6 +41,7 @@ public class Peer {
     private ReentrantLock lock;
     //Map of partitions that each peer has sent you (peer#123, {file1-1.txt, file4-3.txt})
     private ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer;
+    private ConcurrentHashMap<Socket, String> peerUsernamesByConnection;
 
     public Peer(String ip, int port, String shared_directory) {
         this.ip = ip;
@@ -57,6 +58,7 @@ public class Peer {
         this.peerPartitionsByThread = new HashMap<>();
         this.lock = new ReentrantLock();
         this.partitionsByPeer = new ConcurrentHashMap<String, ArrayList<String>>();
+        this.peerUsernamesByConnection = new ConcurrentHashMap<>();
     }
 
     /**
@@ -207,7 +209,7 @@ public class Peer {
                         Socket inConnection = server.accept();
                         Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork,
                                 this.seederOfFiles, this.shared_directory, this.threadByFile,
-                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer, tokenID);
+                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer, this.peerUsernamesByConnection, this.tokenID);
                         t.start();
                     }
                 } catch (IOException e) {

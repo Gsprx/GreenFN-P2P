@@ -32,7 +32,8 @@ public class PeerServerThread extends Thread {
     public PeerServerThread(Socket connection, ArrayList<String> filesInNetwork, ArrayList<HashSet<String>> partitionsInNetwork,
                             ArrayList<String> seederOfFiles, String shared_directory, HashMap<String, String> threadByFile,
                             HashMap<String, HashMap<Socket, ArrayList<String>>> peerPartitionsByThread,
-                            ReentrantLock lock, ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer, int tokenID) {
+                            ReentrantLock lock, ConcurrentHashMap<String, ArrayList<String>> partitionsByPeer, ConcurrentHashMap<Socket, String> peerUsernamesByConnection,
+                            int tokenID) {
         //handle connection
         this.filesInNetwork = filesInNetwork;
         this.partitionsInNetwork = partitionsInNetwork;
@@ -43,7 +44,7 @@ public class PeerServerThread extends Thread {
         this.peerPartitionsByThread = peerPartitionsByThread;
         this.lock = lock;
         this.partitionsByPeer = partitionsByPeer;
-        this.peerUsernamesByConnection = new ConcurrentHashMap<>();
+        this.peerUsernamesByConnection = peerUsernamesByConnection;
         this.tokenID = tokenID;
         try {
             in = new ObjectInputStream(connection.getInputStream());
@@ -71,7 +72,7 @@ public class PeerServerThread extends Thread {
                 default:
                     break;
             }
-            connection.close();
+            this.connection.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -171,7 +172,7 @@ public class PeerServerThread extends Thread {
             int response = 1;
 
             // send response
-            sendResult(new ObjectOutputStream(connection.getOutputStream()), response);
+            sendResult(new ObjectOutputStream(this.connection.getOutputStream()), response);
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -218,10 +219,8 @@ public class PeerServerThread extends Thread {
                         this.threadByFile.remove(fileName);
                         HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.remove(threadName);
                         //Convert involvedPeers to a list
+                        System.out.println("Involved peers (keyset): " + this.peerUsernamesByConnection);
                         List<Socket> involvedPeers = new ArrayList<>(partitionsRequestsPerPeer.keySet());
-                        for (Socket socket : involvedPeers) {
-                            System.out.println("Involved peers: " + this.peerUsernamesByConnection.get(socket));
-                        }
                         //Select a random peer
                         Socket selectedPeer = involvedPeers.get(ThreadLocalRandom.current().nextInt(0, involvedPeers.size()));
                         System.out.println("Selected peer to send: " + this.peerUsernamesByConnection.get(selectedPeer));
@@ -256,7 +255,6 @@ public class PeerServerThread extends Thread {
                             outputStream.writeInt(0);
                             outputStream.flush();
                         }
-                        //Testing-end
                     }
                 }
             } else {
@@ -490,7 +488,7 @@ public class PeerServerThread extends Thread {
 
         //find requesting peer with the most segments sent to us
         Socket maxPeer = null;
-        int maxCount = 0;
+        int maxCount = -1;
         for(Socket peer : peerRequesters) {
             int currentSegmentCount = partitionsByPeer.get(peerUsernamesByConnection.get(peer)).size();
             if(currentSegmentCount > maxCount){
@@ -596,7 +594,7 @@ public class PeerServerThread extends Thread {
                 }
             }
 
-            if(missingSegments) {
+            if (missingSegments) {
                 //keep all known segment names in a set to compare with local segments available
                 HashSet<String> segmentNames = new HashSet<>();
                 for (ArrayList<String> fileOwnersPartition : fileOwnersPartitions) {
@@ -611,6 +609,7 @@ public class PeerServerThread extends Thread {
                     }
                 }
                 //find the requested partitions by the max peer
+                System.out.println("Max peer: " + maxPeer);
                 ArrayList<String> maxPeerRequestedParts = partitionsRequestsPerPeer.get(maxPeer);
 
                 //select a random requested partition to send to max peer
