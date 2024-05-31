@@ -579,7 +579,6 @@ public class Peer {
     private void collaborativeDownload() {
         // get this peer's info and statistics
         String[] myInfo = getName(this.tokenID);
-        int[] myStats = getStatistics(this.tokenID);
 
         ArrayList<String> nonMatchingFiles = getNonMatchingFiles();
         int[] fileInspected = new int[nonMatchingFiles.size()];
@@ -681,12 +680,12 @@ public class Peer {
                             out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
                             // write file name
                             out.writeObject(nextFile);
+                            // option for collaborative download
+                            out.writeInt(0);
                             // write the peer requesting the file
                             out.writeObject(myInfo[2]);
                             // write the partitions of this file this peer owns
                             out.writeObject(partitionsOfFileOwned);
-                            // write the myStats of this peer
-                            out.writeObject(myStats);
                             out.flush();
 
                             ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
@@ -708,7 +707,6 @@ public class Peer {
 
                             } else {
                                 String nameOfPartition = (String) in.readObject();
-                                int sendBackPartitionCode = in.readInt();
                                 // download file
                                 downloadFile(nameOfPartition, in);
                                 // notify tracker
@@ -725,26 +723,6 @@ public class Peer {
                                     ArrayList<String> value = new ArrayList<>();
                                     value.add(nameOfPartition);
                                     this.partitionsByPeer.put(peer[2], value);
-                                }
-                                // code for sending back one of this peer's partitions (if the other peer requested for it)
-                                if (sendBackPartitionCode == 1) {
-                                    // get the parts the other peer owns
-                                    HashSet<String> partitionsOwnedByOtherPeer = (HashSet<String>) in.readObject();
-                                    // create a set where we will store the parts this peer owns but the other peer does not
-                                    ArrayList<String> candidatePartsToSend = new ArrayList<>();
-                                    for (String partName : partitionsOfFileOwned) {
-                                        if (!partitionsOwnedByOtherPeer.contains(partName)) {
-                                            candidatePartsToSend.add(partName);
-                                        }
-                                    }
-                                    // choose the part to send
-                                    String partNameToSend = candidatePartsToSend.get(new Random().nextInt(candidatePartsToSend.size()));
-                                    out.writeObject(partNameToSend);
-                                    out.flush();
-                                    sendFile(out, partNameToSend);
-                                    // TODO: send the contents of this part - TEST IT
-                                } else {
-                                    System.out.println("OK NIBBA, I WILL NOT SEND BACK ANY FILES");
                                 }
                             }
                             threadsFinished[finalI] = 1;

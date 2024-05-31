@@ -526,17 +526,15 @@ public class TrackerThread extends Thread{
     private void replyUserStatistics() {
         try {
             //identify requester
-            int requesterTokenID = in.readInt();
-            // get peer username
-            String userName = activeUsers.get(requesterTokenID)[0];
+            String[] peer = (String[]) in.readObject();
             // get user statistics
-            int[] stats = userCountStatistics.get(userName);
+            int[] stats = userCountStatistics.get(peer[2]);
 
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             out.writeObject(stats);
             out.flush();
 
-        } catch (IOException e) {
+        } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
