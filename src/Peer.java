@@ -670,6 +670,7 @@ public class Peer {
                 int[] threadsFinished = new int[peersToRequestTo.size()]; // check which threads have finished
                 for (int i = 0; i < peersToRequestTo.size(); i++) {
                     int finalI = i;
+                    ArrayList<String[]> finalPeersOwningFile = peersOwningFile;
                     Thread peerRequestsThread = new Thread(() -> {
                         try {
                             System.out.println(Thread.currentThread().getName() + " I: " + finalI);
@@ -697,8 +698,8 @@ public class Peer {
                                 // useless
                                 System.out.println(peer[2] + "(" + Thread.currentThread().getName() + ") doesn't have any useful partitions for file " + nextFile);
                                 int indexOfPeerOwningFile = -1;
-                                for (int p = 0; p < peersOwningFile.size(); p++) {
-                                    if (peersOwningFile.get(p)[2].equals(peer[2])) {
+                                for (int p = 0; p < finalPeersOwningFile.size(); p++) {
+                                    if (finalPeersOwningFile.get(p)[2].equals(peer[2])) {
                                         indexOfPeerOwningFile = p;
                                         break;
                                     }
@@ -754,6 +755,14 @@ public class Peer {
                     assembleFile(nextFile, totalNumberOfParts);
                     this.seederOfFiles = seederOfFilesInNetwork();
                     sendTrackerInformationAsSeeder(this.tokenID);
+                } else { // if the file is not assembled, update details results and then ask again
+                    detailsResult = details(nextFile);
+                    peersOwningFile = (ArrayList<String[]>) detailsResult.get(0);
+                    //ArrayList<int[]> peersOwningFileStats = (ArrayList<int[]>) detailsResult.get(1);
+                    //ArrayList<ArrayList<String>> peersOwningFilePartitions = (ArrayList<ArrayList<String>>) detailsResult.get(2);
+                    peersOwningFileSeederBit = (ArrayList<Boolean>) detailsResult.get(3);
+                    totalNumberOfParts = (int) detailsResult.get(4);
+
                 }
             }
         }
@@ -828,7 +837,7 @@ public class Peer {
             fileOutputStream.close();
 
             // notify tracker for successful download
-            System.out.println("File received successfully.");
+            System.out.println("File " + fileName + " received successfully.");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
