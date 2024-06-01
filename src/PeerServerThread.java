@@ -4,6 +4,7 @@ import misc.Function;
 import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.sql.SQLOutput;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -239,8 +240,6 @@ public class PeerServerThread extends Thread {
                         outputStream.flush();
                         // send the file
                         sendFile(outputStream, selectedPart);
-                        // TODO: wait until the other peer has read all the contents of the file, and then we can close the socket
-                        // TODO: without any problems
                         try {
                             TimeUnit.MILLISECONDS.sleep(200);
                         } catch (InterruptedException e) {
@@ -330,8 +329,8 @@ public class PeerServerThread extends Thread {
                 TimeUnit.MILLISECONDS.sleep(200);
                 synchronized (this.peerPartitionsByThread) {
                     synchronized (this.threadByFile) {
-                        this.threadByFile.remove(fileName);
-                        HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.remove(threadName);
+                        this.threadByFile.get(fileName);
+                        HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.get(threadName);
 
                         if (partitionsRequestsPerPeer.size() == 1) {
                             //A
@@ -354,13 +353,12 @@ public class PeerServerThread extends Thread {
                                     outputStream.flush();
                                     //Send the selected part
                                     sendFile(outputStream, selectedPart);
-                                    // TODO: wait until the other peer has read all the contents of the file, and then we can close the socket
-                                    // TODO: without any problems
                                     try {
                                         TimeUnit.MILLISECONDS.sleep(200);
                                     } catch (InterruptedException e) {
                                         throw new RuntimeException(e);
                                     }
+                                    //TODO: ASK TO SEND BACK FILE
                                 }
                             }
                         } else {
@@ -368,7 +366,7 @@ public class PeerServerThread extends Thread {
                             int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
                             int randomIndex = new Random().nextInt(10);
                             int decision = chanceBucket[randomIndex];
-                            decision = 2;
+                            decision = 1;
 
                             switch (decision) {
                                 case 0:
@@ -383,6 +381,8 @@ public class PeerServerThread extends Thread {
                                     break;
                             }
                         }
+                        this.threadByFile.remove(fileName);
+                        this.peerPartitionsByThread.remove(threadName);
                     }
                 }
 
@@ -403,7 +403,7 @@ public class PeerServerThread extends Thread {
                         for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
                             int i=1;
                             for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
-                                System.out.println(i + ". Socket: " + entry2.getKey() + " | Parts: " + entry2.getValue());
+                                System.out.println(i + ". Peer: " + this.peerUsernamesByConnection.get(entry2.getKey()) + " | Parts: " + entry2.getValue());
                                 i++;
                             }
                         }
@@ -434,6 +434,8 @@ public class PeerServerThread extends Thread {
             }
         }
 
+        System.out.println("Sent request: " + peerRequestersSet);
+
         // cast hashset to arraylist, so we can serially get each peer
         ArrayList<Socket> peerRequesters = new ArrayList<>(peerRequestersSet);
         // array where we will store each peers statistics (download count, download fails)
@@ -457,8 +459,8 @@ public class PeerServerThread extends Thread {
         }
 
         // choose the better peer
-        int betterPeerIndex = -1;
-        double prevResult = -1;
+        int betterPeerIndex = 0;
+        double prevResult = 0;
         for (int i = 0; i < peerRequesters.size(); i++) {
             double result = priorityFormula(stats.get(i)[0], stats.get(i)[1]);
             if (result > prevResult) {
@@ -467,7 +469,73 @@ public class PeerServerThread extends Thread {
             }
         }
 
+        // get the best peer based on the bestPeerIndex
+        Socket bestPeer = peerRequesters.get(betterPeerIndex);
+        ObjectOutputStream out;
+
+        // notify all other requesting peers about their failure of choice
+        for(Socket peer : peerRequesters){
+            if(peer.equals(bestPeer)){
+                continue;
+            }
+            try {
+                this.peerUsernamesByConnection.remove(peer);
+                out = new ObjectOutputStream(peer.getOutputStream());
+                out.writeInt(0);
+                out.flush();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+
         // TODO: Send appropriate file part and request one as well (if needed)
+        try {
+            this.peerUsernamesByConnection.remove(bestPeer);
+            out = new ObjectOutputStream(bestPeer.getOutputStream());
+            // get each peers partitions
+            HashMap<Socket, ArrayList<String>> partitionsByPeer = this.peerPartitionsByThread.get(threadName);
+            // get the best's peer partitions
+            ArrayList<String> bestPeerPartitions = partitionsByPeer.get(bestPeer);
+            // get the parts we own for the file
+            ArrayList<String> ourParts = new ArrayList<>(this.partitionsInNetwork.get(this.filesInNetwork.indexOf(filename)));
+            // get the candidate parts to send
+            ArrayList<String> candidateParts = new ArrayList<>();
+            // for each part we own for the file we check if the peer we are sending it to has it as well
+            // if he doesn't then add it to the candidate parts
+            for (String part : ourParts) {
+                if (!bestPeerPartitions.contains(part)) {
+                    candidateParts.add(part);
+                }
+            }
+
+            // if there are no useful partitions to send then send code -1
+            if (candidateParts.isEmpty()) {
+                out.writeInt(-1);
+                out.flush();
+                return;
+            }
+
+            // randomly choose which part to send
+            String partToSend = candidateParts.get(new Random().nextInt(0, candidateParts.size()));
+
+            // send it
+            out.writeInt(1);
+            out.flush();
+            // write the name of the part we are sending
+            out.writeObject(partToSend);
+            out.flush();
+            // send the part
+            sendFile(out, partToSend);
+            try {
+                TimeUnit.MILLISECONDS.sleep(200);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void peerWithMostSegmentsSent(String filename, HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer) {
@@ -582,7 +650,7 @@ public class PeerServerThread extends Thread {
             int fileIndex = -1;
             HashSet<String> existingPartitions = new HashSet<>();
 
-            //scan relevant entries in partitions in network datastruct
+            //scan relevant entries in partitions in network data struct
             for(int i =0; i<filesInNetwork.size(); i++){
                 if(filesInNetwork.get(i).equals(filename)){
                     fileIndex = i;
