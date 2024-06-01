@@ -685,7 +685,10 @@ public class PeerServerThread extends Thread {
                 String selectedPartitionSend = maxPeerRequestedParts.get(randIndex);
 
                 //send this partition to the max peer
-                sendFile(new ObjectOutputStream(maxPeer.getOutputStream()), selectedPartitionSend);
+                ObjectOutputStream outputStream = new ObjectOutputStream(maxPeer.getOutputStream());
+                outputStream.writeObject(selectedPartitionSend);
+                out.flush();
+                sendFile(new ObjectOutputStream(outputStream), selectedPartitionSend);
                 System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " sent a file (" + selectedPartitionSend + ")" + " to max peer: " + peerUsernamesByConnection.get(maxPeer));
 
 
