@@ -73,7 +73,7 @@ public class PeerServerThread extends Thread {
                 default:
                     break;
             }
-            this.connection.close();
+            connection.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -216,70 +216,66 @@ public class PeerServerThread extends Thread {
                 lock.unlock();
                 TimeUnit.MILLISECONDS.sleep(200);
                 synchronized (this.peerPartitionsByThread) {
-                    synchronized (this.threadByFile) {
-                        this.threadByFile.remove(fileName);
-                        HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.remove(threadName);
-                        //Convert involvedPeers to a list
-                        System.out.println("Involved peers (keyset): " + this.peerUsernamesByConnection);
-                        List<Socket> involvedPeers = new ArrayList<>(partitionsRequestsPerPeer.keySet());
-                        //Select a random peer
-                        Socket selectedPeer = involvedPeers.get(ThreadLocalRandom.current().nextInt(0, involvedPeers.size()));
-                        System.out.println("Selected peer to send: " + this.peerUsernamesByConnection.get(selectedPeer));
-                        //Retrieve the ArrayList of file partitions requested of the random peer
-                        ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(selectedPeer);
-                        //Select a random partition from the ArrayList
-                        String selectedPart = requestedPartitions.get(ThreadLocalRandom.current().nextInt(0, requestedPartitions.size()));
-                        //Get outputStream
-                        ObjectOutputStream outputStream = new ObjectOutputStream(selectedPeer.getOutputStream());
-                        //The codes can be changed to fit the method in the Peer!!!!!!!!!!!!!!!!!!!
-                        //Send "OK" code - this can be removed
-                        outputStream.writeInt(1);
+                    this.threadByFile.remove(fileName);
+                    HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.remove(threadName);
+                    //Convert involvedPeers to a list
+                    System.out.println("Involved peers (keyset): " + this.peerUsernamesByConnection);
+                    List<Socket> involvedPeers = new ArrayList<>(partitionsRequestsPerPeer.keySet());
+                    //Select a random peer
+                    Socket selectedPeer = involvedPeers.get(ThreadLocalRandom.current().nextInt(0, involvedPeers.size()));
+                    System.out.println("Selected peer to send: " + this.peerUsernamesByConnection.get(selectedPeer));
+                    //Retrieve the ArrayList of file partitions requested of the random peer
+                    ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(selectedPeer);
+                    //Select a random partition from the ArrayList
+                    String selectedPart = requestedPartitions.get(ThreadLocalRandom.current().nextInt(0, requestedPartitions.size()));
+                    //Get outputStream
+                    ObjectOutputStream outputStream = new ObjectOutputStream(selectedPeer.getOutputStream());
+                    //The codes can be changed to fit the method in the Peer!!!!!!!!!!!!!!!!!!!
+                    //Send "OK" code - this can be removed
+                    outputStream.writeInt(1);
+                    outputStream.flush();
+                    // send name of the part
+                    outputStream.writeObject(selectedPart);
+                    outputStream.flush();
+                    // send the file
+                    sendFile(outputStream, selectedPart);
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(500);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                    //Send "DENIED" to the rest
+                    involvedPeers.remove(selectedPeer);
+                    this.peerUsernamesByConnection.remove(selectedPeer);
+                    for(Socket socket : involvedPeers) {
+                        this.peerUsernamesByConnection.remove(socket);
+                        outputStream = new ObjectOutputStream(socket.getOutputStream());
+                        outputStream.writeInt(0);
                         outputStream.flush();
-                        // send name of the part
-                        outputStream.writeObject(selectedPart);
-                        outputStream.flush();
-                        // send the file
-                        sendFile(outputStream, selectedPart);
-                        try {
-                            TimeUnit.MILLISECONDS.sleep(200);
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                        //Send "DENIED" to the rest
-                        involvedPeers.remove(selectedPeer);
-                        this.peerUsernamesByConnection.remove(selectedPeer);
-                        for(Socket socket : involvedPeers) {
-                            this.peerUsernamesByConnection.remove(socket);
-                            outputStream = new ObjectOutputStream(socket.getOutputStream());
-                            outputStream.writeInt(0);
-                            outputStream.flush();
-                        }
                     }
                 }
             } else {
                 synchronized (this.peerPartitionsByThread) {
-                    synchronized (this.threadByFile) {
-                        // if the initial thread above got removed (because we waited 200ms and moved on in the if statement above),
-                        // then ignore this request
-                        if (!this.threadByFile.containsKey(fileName)) {
-                            lock.unlock();
-                            return;
-                        }
-                        String initThread = this.threadByFile.get(fileName);
-
-                        HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
-                        existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
-                        this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
-                        for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
-                            int i=1;
-                            for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
-                                System.out.println(i + ". Socket: " + entry2.getKey() + " | Parts: " + entry2.getValue());
-                                i++;
-                            }
-                        }
-
+                    // if the initial thread above got removed (because we waited 200ms and moved on in the if statement above),
+                    // then ignore this request
+                    if (!this.threadByFile.containsKey(fileName)) {
                         lock.unlock();
+                        return;
                     }
+                    String initThread = this.threadByFile.get(fileName);
+
+                    HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+                    existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
+                    this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
+                    for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
+                        int i=1;
+                        for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
+                            System.out.println(i + ". Socket: " + entry2.getKey() + " | Parts: " + entry2.getValue());
+                            i++;
+                        }
+                    }
+
+                    lock.unlock();
                 }
                 try {
                     TimeUnit.MILLISECONDS.sleep(500);
@@ -328,90 +324,87 @@ public class PeerServerThread extends Thread {
                 lock.unlock();
                 TimeUnit.MILLISECONDS.sleep(200);
                 synchronized (this.peerPartitionsByThread) {
-                    synchronized (this.threadByFile) {
-                        this.threadByFile.get(fileName);
-                        HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.get(threadName);
+                    this.threadByFile.get(fileName);
+                    HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer = this.peerPartitionsByThread.get(threadName);
 
-                        if (partitionsRequestsPerPeer.size() == 1) {
-                            //A
-                            for (Socket socket : partitionsRequestsPerPeer.keySet()) {
-                                ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
-                                //Retrieve the ArrayList of file partitions requested of the random peer
-                                ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(socket);
-                                // if we don't have any of the parts the other peer requested
-                                if (requestedPartitions.isEmpty()) {
-                                    outputStream.writeInt(-1);
-                                    outputStream.flush();
-                                } else {
-                                    // Select a random partition from the ArrayList
-                                    String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
-                                    //Send "OK" code - this can be removed
-                                    outputStream.writeInt(1);
-                                    outputStream.flush();
-                                    // send name of the part
-                                    outputStream.writeObject(selectedPart);
-                                    outputStream.flush();
-                                    //Send the selected part
-                                    sendFile(outputStream, selectedPart);
-                                    try {
-                                        TimeUnit.MILLISECONDS.sleep(200);
-                                    } catch (InterruptedException e) {
-                                        throw new RuntimeException(e);
-                                    }
-                                    //TODO: ASK TO SEND BACK FILE
+                    if (partitionsRequestsPerPeer.size() == 1) {
+                        //A
+                        for (Socket socket : partitionsRequestsPerPeer.keySet()) {
+                            ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
+                            //Retrieve the ArrayList of file partitions requested of the random peer
+                            ArrayList<String> requestedPartitions = partitionsRequestsPerPeer.get(socket);
+                            // if we don't have any of the parts the other peer requested
+                            if (requestedPartitions.isEmpty()) {
+                                outputStream.writeInt(-1);
+                                outputStream.flush();
+                            } else {
+                                // Select a random partition from the ArrayList
+                                String selectedPart = requestedPartitions.get(new Random().nextInt(requestedPartitions.size()));
+                                //Send "OK" code - this can be removed
+                                outputStream.writeInt(1);
+                                outputStream.flush();
+                                // send name of the part
+                                outputStream.writeObject(selectedPart);
+                                outputStream.flush();
+                                //Send the selected part
+                                sendFile(outputStream, selectedPart);
+                                try {
+                                    TimeUnit.MILLISECONDS.sleep(500);
+                                } catch (InterruptedException e) {
+                                    throw new RuntimeException(e);
                                 }
+                                //TODO: ASK TO SEND BACK FILE
                             }
-                        } else {
-                            //B
-                            int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
-                            int randomIndex = new Random().nextInt(10);
-                            int decision = chanceBucket[randomIndex];
-                            decision = 1;
-
-                            switch (decision) {
-                                case 0:
-                                    randomPeerSelection(fileName, partitionsRequestsPerPeer);
-                                    break;
-                                case 1:
-                                    bestPeerFormula(fileName, threadName);
-                                    break;
-                                case 2:
-                                    peerWithMostSegmentsSent(fileName, partitionsRequestsPerPeer);
-                                    break;
-                                default:
-                                    break;
-                            }
-
                         }
-                        this.threadByFile.remove(fileName);
-                        this.peerPartitionsByThread.remove(threadName);
+                    } else {
+                        //B
+                        int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
+                        int randomIndex = new Random().nextInt(10);
+                        int decision = chanceBucket[randomIndex];
+                        decision = 0;
+
+                        switch (decision) {
+                            case 0:
+                                randomPeerSelection(fileName, partitionsRequestsPerPeer);
+                                break;
+                            case 1:
+                                bestPeerFormula(fileName, threadName);
+                                break;
+                            case 2:
+                                peerWithMostSegmentsSent(fileName, partitionsRequestsPerPeer);
+                                break;
+                            default:
+                                break;
+                        }
+
                     }
+                    this.threadByFile.remove(fileName);
+                    this.peerPartitionsByThread.remove(threadName);
                 }
 
             } else {
                 synchronized (this.peerPartitionsByThread) {
-                    synchronized (this.threadByFile) {
-                        // if the initial thread above got removed (because we waited 200ms and moved on in the if statement above),
-                        // then ignore this request
-                        if (!this.threadByFile.containsKey(fileName)) {
-                            lock.unlock();
-                            return;
-                        }
-                        String initThread = this.threadByFile.get(fileName);
-
-                        HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
-                        existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
-                        this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
-                        for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
-                            int i=1;
-                            for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
-                                System.out.println(i + ". Peer: " + this.peerUsernamesByConnection.get(entry2.getKey()) + " | Parts: " + entry2.getValue());
-                                i++;
-                            }
-                        }
-
+                    // if the initial thread above got removed (because we waited 200ms and moved on in the if statement above),
+                    // then ignore this request
+                    if (!this.threadByFile.containsKey(fileName)) {
                         lock.unlock();
+                        return;
                     }
+                    String initThread = this.threadByFile.get(fileName);
+
+                    HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+                    existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
+                    this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
+                    for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
+                        int i=1;
+                        for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
+                            System.out.println(i + ". Peer: " + this.peerUsernamesByConnection.get(entry2.getKey()) + " | Parts: " + entry2.getValue());
+                            i++;
+                        }
+                    }
+
+                    lock.unlock();
+
                 }
                 try {
                     TimeUnit.MILLISECONDS.sleep(500);
@@ -453,7 +446,7 @@ public class PeerServerThread extends Thread {
                 //Send the selected part
                 sendFile(out, selectedPart);
                 try {
-                    TimeUnit.MILLISECONDS.sleep(200);
+                    TimeUnit.MILLISECONDS.sleep(500);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -578,7 +571,6 @@ public class PeerServerThread extends Thread {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

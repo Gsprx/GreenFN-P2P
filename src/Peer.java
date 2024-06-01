@@ -675,7 +675,7 @@ public class Peer {
                     ArrayList<String[]> finalPeersOwningFile = peersOwningFile;
                     Thread peerRequestsThread = new Thread(() -> {
                         try {
-                            System.out.println(Thread.currentThread().getName() + " I: " + finalI);
+                            //System.out.println(Thread.currentThread().getName() + " I: " + finalI);
                             String[] peer = peersToRequestTo.get(finalI);
                             Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]));
                             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
@@ -698,7 +698,7 @@ public class Peer {
                             } else if (result == -1) {
                                 // if the peer responds saying he doesn't own any useful files for us, then mark him as
                                 // useless
-                                System.out.println(peer[2] + "(" + Thread.currentThread().getName() + ") doesn't have any useful partitions for file " + nextFile);
+                                System.out.println(peer[2] + " (" + Thread.currentThread().getName() + ") doesn't have any useful partitions for file " + nextFile);
                                 int indexOfPeerOwningFile = -1;
                                 for (int p = 0; p < finalPeersOwningFile.size(); p++) {
                                     if (finalPeersOwningFile.get(p)[2].equals(peer[2])) {
@@ -829,7 +829,11 @@ public class Peer {
             for (int i=0; i<fileParts; i++){
                 fileBytes = new byte[Config.DOWNLOAD_SIZE];
                 int bytesRead;
+                System.out.println("Downloading FILE!!!");
+                int counter = 0;
                 while ((bytesRead = in.read(fileBytes)) != -1) {
+                    System.out.println(counter);
+                    counter += bytesRead;
                     //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
                     bufferedOutputStream.write(fileBytes, 0, bytesRead);
                 }
