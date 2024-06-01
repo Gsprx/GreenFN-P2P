@@ -370,6 +370,7 @@ public class PeerServerThread extends Thread {
 
                             switch (decision) {
                                 case 0:
+                                    randomPeerSelection(fileName, partitionsRequestsPerPeer);
                                     break;
                                 case 1:
                                     bestPeerFormula(fileName, threadName);
@@ -380,6 +381,7 @@ public class PeerServerThread extends Thread {
                                 default:
                                     break;
                             }
+
                         }
                         this.threadByFile.remove(fileName);
                         this.peerPartitionsByThread.remove(threadName);
@@ -422,6 +424,50 @@ public class PeerServerThread extends Thread {
         }
     }
 
+    /**
+     * case 0 - Randomly select a peer
+     * */
+    private void randomPeerSelection(String fileName, HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer){
+        //get all the peers that requested
+        List<Socket> requestedPeers = new ArrayList<>(partitionsRequestsPerPeer.keySet());
+        //select randomly a peer
+        Socket selectedPeer = requestedPeers.get(ThreadLocalRandom.current().nextInt(requestedPeers.size()));
+        try {
+            //open an output stream
+            ObjectOutputStream out = new ObjectOutputStream(selectedPeer.getOutputStream());
+            //get the requested parts from the selected peer
+            ArrayList<String> requestedPartsOfSelectedPeer = partitionsRequestsPerPeer.get(selectedPeer);
+            // if we don't have any of the parts the other peer requested
+            if (requestedPartsOfSelectedPeer.isEmpty()) {
+                out.writeInt(-1);
+                out.flush();
+            } else {
+                // Select a random partition from the List
+                String selectedPart = requestedPartsOfSelectedPeer.get(ThreadLocalRandom.current().nextInt(requestedPartsOfSelectedPeer.size()));
+                //Send "OK" code
+                out.writeInt(1);
+                out.flush();
+                // send name of the part
+                out.writeObject(selectedPart);
+                out.flush();
+                //Send the selected part
+                sendFile(out, selectedPart);
+                try {
+                    TimeUnit.MILLISECONDS.sleep(200);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                //TODO: ASK TO SEND BACK FILE
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * case 1 - Select the best peer
+     * */
     private void bestPeerFormula(String filename, String threadName) {
         //find all peers who requested segments of the specific file - filename
         HashSet<Socket> peerRequestersSet = new HashSet<>();
@@ -538,6 +584,9 @@ public class PeerServerThread extends Thread {
         }
     }
 
+    /**
+     * case 2 - Select peer who has sent the most parts so far
+     * */
     private void peerWithMostSegmentsSent(String filename, HashMap<Socket, ArrayList<String>> partitionsRequestsPerPeer) {
         //find all peers who requested segments of the specific file - filename
         HashSet<Socket> peerRequesters = new HashSet<>();
