@@ -433,7 +433,7 @@ public class PeerServerThread extends Thread {
                         int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
                         int randomIndex = new Random().nextInt(10);
                         int decision = chanceBucket[randomIndex];
-                        decision = 2;
+                        decision = 0;
 
                         switch (decision) {
                             case 0:
@@ -453,57 +453,52 @@ public class PeerServerThread extends Thread {
                     this.threadByFile.remove(fileName);
                     this.peerPartitionsByThread.remove(threadName);
 
+                    /*
                     if (selectedPeer != null) {
                         String selectedPeerUsername = this.peerUsernamesByConnection.remove(selectedPeer);
                         HashSet<String> existingPartitions = this.partitionsInNetwork.get(this.filesInNetwork.indexOf(fileName));
 
-                        ObjectInputStream tracker_in;
-                        String[] selectedPeerInfo;
-                        try (Socket askTrackerPeerInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                            // ask tracker for this peer's info
-                            ObjectOutputStream tracker_out = new ObjectOutputStream(askTrackerPeerInfo.getOutputStream());
-                            tracker_out.writeInt(Function.SEND_OTHER_PEER_INFO.getEncoded());
-                            tracker_out.writeObject(selectedPeerUsername);
-                            tracker_out.flush();
-                            tracker_in = new ObjectInputStream(askTrackerPeerInfo.getInputStream());
-                            selectedPeerInfo = (String[]) tracker_in.readObject();
+                        Socket askTrackerPeerInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                        // ask tracker for this peer's info
+                        ObjectOutputStream tracker_out = new ObjectOutputStream(askTrackerPeerInfo.getOutputStream());
+                        tracker_out.writeInt(Function.SEND_OTHER_PEER_INFO.getEncoded());
+                        tracker_out.writeObject(selectedPeerUsername);
+                        tracker_out.flush();
+                        ObjectInputStream tracker_in = new ObjectInputStream(askTrackerPeerInfo.getInputStream());
+                        String[] selectedPeerInfo = (String[]) tracker_in.readObject();
 
-                            // ask tracker for the file info
-                            try (Socket askTrackerFileInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                                tracker_out = new ObjectOutputStream(askTrackerFileInfo.getOutputStream());
-                            }
-                            tracker_out.writeInt(Function.REPLY_DETAILS.getEncoded());
-                            tracker_out.writeInt(this.tokenID);
-                            tracker_out.writeObject(fileName);
-                            tracker_out.flush();
-                            tracker_in = new ObjectInputStream(askTrackerPeerInfo.getInputStream());
-                        }
-                        tracker_in.readInt();
-                        tracker_in.readObject();
-                        tracker_in.readObject();
-                        tracker_in.readObject();
-                        tracker_in.readObject();
-                        int totalNumberOfParts = tracker_in.readInt();
+                        // ask tracker for the file info
+                        Socket askTrackerFileInfo = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                        ObjectOutputStream tracker_out2 = new ObjectOutputStream(askTrackerFileInfo.getOutputStream());
+                        tracker_out2.writeInt(Function.REPLY_DETAILS.getEncoded());
+                        tracker_out2.writeInt(this.tokenID);
+                        tracker_out2.writeObject(fileName);
+                        tracker_out2.flush();
+                        ObjectInputStream tracker_in2 = new ObjectInputStream(askTrackerPeerInfo.getInputStream());
+                        tracker_in2.readInt();
+                        tracker_in2.readObject();
+                        tracker_in2.readObject();
+                        tracker_in2.readObject();
+                        tracker_in2.readObject();
+                        int totalNumberOfParts = tracker_in2.readInt();
 
-                        ObjectInputStream inputStream;
-                        try (Socket askingBackSocket = new Socket(selectedPeerInfo[0], Integer.parseInt(selectedPeerInfo[1]))) {
-                            ObjectOutputStream outputStream = new ObjectOutputStream(askingBackSocket.getOutputStream());
-                            //collaborative download code
-                            outputStream.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
-                            //requested file name
-                            outputStream.writeObject(fileName);
-                            // option for collaborative download handler
-                            outputStream.writeInt(1);
-                            //username
-                            outputStream.writeObject(Peer.lastUsedUsername);
-                            //our existing partitions
-                            outputStream.writeObject(existingPartitions);
-                            outputStream.flush();
+                        Socket askingBackSocket = new Socket(selectedPeerInfo[0], Integer.parseInt(selectedPeerInfo[1]));
+                        ObjectOutputStream outputStream = new ObjectOutputStream(askingBackSocket.getOutputStream());
+                        //collaborative download code
+                        outputStream.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
+                        //requested file name
+                        outputStream.writeObject(fileName);
+                        // option for collaborative download handler
+                        outputStream.writeInt(1);
+                        //username
+                        outputStream.writeObject(Peer.lastUsedUsername);
+                        //our existing partitions
+                        outputStream.writeObject(existingPartitions);
+                        outputStream.flush();
 
-                            // wait for response
-                            System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " requested a file from selected peer: " + selectedPeerUsername);
-                            inputStream = new ObjectInputStream(askingBackSocket.getInputStream());
-                        }
+                        // wait for response
+                        System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " requested a file from selected peer: " + selectedPeerUsername);
+                        ObjectInputStream inputStream = new ObjectInputStream(askingBackSocket.getInputStream());
                         int result = inputStream.readInt();
                         if (result == -1) {
                             // if the peer responds saying he doesn't own any useful files for us
@@ -521,7 +516,7 @@ public class PeerServerThread extends Thread {
                             if (this.partitionsByPeer.containsKey(selectedPeerInfo[2])) {
                                 this.partitionsByPeer.get(selectedPeerInfo[2]).add(nameOfPartition);
                             }
-                                // if we haven't downloaded from this peer before then create a new entry in the struct
+                            // if we haven't downloaded from this peer before then create a new entry in the struct
                             else {
                                 ArrayList<String> value = new ArrayList<>();
                                 value.add(nameOfPartition);
@@ -537,6 +532,8 @@ public class PeerServerThread extends Thread {
                         }
 
                     }
+
+                     */
                 }
 
             } else {
@@ -570,7 +567,7 @@ public class PeerServerThread extends Thread {
                     throw new RuntimeException(e);
                 }
             }
-        } catch (InterruptedException | IOException | ClassNotFoundException e) {
+        } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
     }
@@ -675,14 +672,12 @@ public class PeerServerThread extends Thread {
         for (Socket peerConnection : peerRequesters) {
             try {
                 String peerUsername = this.peerUsernamesByConnection.get(peerConnection);
-                ObjectInputStream trackerIn;
-                try (Socket trackerConnect = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                    ObjectOutputStream trackerOut = new ObjectOutputStream(trackerConnect.getOutputStream());
-                    trackerOut.writeInt(Function.REPLY_PEER_STATISTICS.getEncoded());
-                    trackerOut.writeObject(peerUsername);
-                    trackerOut.flush();
-                    trackerIn = new ObjectInputStream(trackerConnect.getInputStream());
-                }
+                Socket trackerConnect = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                ObjectOutputStream trackerOut = new ObjectOutputStream(trackerConnect.getOutputStream());
+                trackerOut.writeInt(Function.REPLY_PEER_STATISTICS.getEncoded());
+                trackerOut.writeObject(peerUsername);
+                trackerOut.flush();
+                ObjectInputStream trackerIn = new ObjectInputStream(trackerConnect.getInputStream());
                 int[] peerStats = (int[]) trackerIn.readObject();
                 stats.add(peerStats);
             } catch (IOException | ClassNotFoundException e) {
@@ -794,15 +789,13 @@ public class PeerServerThread extends Thread {
             else if(currentSegmentCount == maxCount){
                 try {
                     //connect to tracker and get count download/fail to determine max peer in case of equality
-                    ObjectInputStream in;
-                    try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                        ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                        out.writeInt(Function.REPLY_DETAILS.getEncoded());
-                        out.writeInt(tokenID);
-                        out.writeObject(filename);
+                    Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                    out.writeInt(Function.REPLY_DETAILS.getEncoded());
+                    out.writeInt(tokenID);
+                    out.writeObject(filename);
 
-                        in = new ObjectInputStream(socket.getInputStream());
-                    }
+                    ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
                     //read data from tracker
                     in.readInt();
                     ArrayList<String[]> fileOwnersInfo = (ArrayList<String[]>) in.readObject();
@@ -1171,10 +1164,8 @@ public class PeerServerThread extends Thread {
         if (!this.isSeeder) return;
         try {
             for (String file : seederOfFiles) {
-                ObjectOutputStream out;
-                try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                    out = new ObjectOutputStream(socket.getOutputStream());
-                }
+                Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 //Send register code
                 out.writeInt(Function.SEEDER_INFORM.getEncoded());
                 out.flush();

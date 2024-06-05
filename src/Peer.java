@@ -539,18 +539,16 @@ public class Peer {
 
             // try to establish connection with peer
             try {
-                ObjectInputStream in;
-                try (Socket downloadSocket = new Socket(currentPeer[0], Integer.parseInt(currentPeer[1]))) {
-                    ObjectOutputStream out = new ObjectOutputStream(downloadSocket.getOutputStream());
+                Socket downloadSocket = new Socket(currentPeer[0], Integer.parseInt(currentPeer[1]));
+                ObjectOutputStream out = new ObjectOutputStream(downloadSocket.getOutputStream());
 
-                    // code for simple download: 8
-                    out.writeInt(Function.SIMPLE_DOWNLOAD.getEncoded());
-                    out.writeObject(fileName);
-                    out.flush();
+                // code for simple download: 8
+                out.writeInt(Function.SIMPLE_DOWNLOAD.getEncoded());
+                out.writeObject(fileName);
+                out.flush();
 
-                    // wait for response
-                    in = new ObjectInputStream(downloadSocket.getInputStream());
-                }
+                // wait for response
+                ObjectInputStream in = new ObjectInputStream(downloadSocket.getInputStream());
                 int result = (int) in.readObject();
                 // result 0 = file does not exist
                 if (result == 0) {
@@ -638,7 +636,7 @@ public class Peer {
                 // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
                 if (peersOwningFile.size() > 4) {
                     int requestToSeederCounter = 0; // we want at most 2 seeders
-                    while (peersToRequestTo.size() < 4) {
+                    while (peersToRequestTo.size() < 5) {
                         int randIndex = new Random().nextInt(peersOwningFile.size());
                         // if we've already selected this peer or its ourselves then skip
                         if (peersToRequestTo.contains(peersOwningFile.get(randIndex)) || peersOwningFile.get(randIndex)[2].equals(myInfo[2])) continue;
@@ -647,7 +645,7 @@ public class Peer {
                         if (peersOwningFileSeederBit.get(randIndex) && requestToSeederCounter < 2) {
                             peersToRequestTo.add(peersOwningFile.get(randIndex));
                             requestToSeederCounter++;
-                        } else if (!peersOwningFileSeederBit.get(randIndex)) {
+                        } else  {
                             peersToRequestTo.add(peersOwningFile.get(randIndex));
                         }
                     }
@@ -679,23 +677,21 @@ public class Peer {
                         try {
                             //System.out.println(Thread.currentThread().getName() + " I: " + finalI);
                             String[] peer = peersToRequestTo.get(finalI);
-                            ObjectInputStream in;
-                            try (Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]))) {
-                                ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
-                                // write collaborative function code
-                                out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
-                                // write file name
-                                out.writeObject(nextFile);
-                                // option for collaborative download
-                                out.writeInt(0);
-                                // write the peer requesting the file
-                                out.writeObject(myInfo[2]);
-                                // write the partitions of this file this peer owns
-                                out.writeObject(partitionsOfFileOwned);
-                                out.flush();
+                            Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]));
+                            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
+                            // write collaborative function code
+                            out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
+                            // write file name
+                            out.writeObject(nextFile);
+                            // option for collaborative download
+                            out.writeInt(0);
+                            // write the peer requesting the file
+                            out.writeObject(myInfo[2]);
+                            // write the partitions of this file this peer owns
+                            out.writeObject(partitionsOfFileOwned);
+                            out.flush();
 
-                                in = new ObjectInputStream(connection.getInputStream());
-                            }
+                            ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
                             int result = in.readInt();
                             if (result == 0) {
                                 System.out.println("[" + Thread.currentThread().getName() + "] " + peer[2] + " denied request.");
@@ -716,10 +712,6 @@ public class Peer {
                                 String nameOfPartition = (String) in.readObject();
                                 // download file
                                 downloadFile2(nameOfPartition, in);
-                                //Test
-                                /*out.writeObject(Thread.currentThread().getName());
-                                out.flush();*/
-                                //Test-end
                                 // notify tracker
                                 notifyTracker(1, peer, nameOfPartition);
                                 System.out.println("[" + Thread.currentThread().getName() + "] " + "Successfully downloaded and notified tracker for file " + nameOfPartition + " from peer " + peer[2]);
@@ -753,16 +745,12 @@ public class Peer {
                     }
                 }
 
-                if (Arrays.stream(peerOwningFileNoUsefulPartition).sum() == peerOwningFileNoUsefulPartition.length) {
-                    System.out.println("Asked all peers for file " + nextFile + " and no one has the partitions we need :(");
-                    break;
-                }
-
                 // check if the file is whole
                 if (this.filesInNetwork.contains(nextFile) && this.partitionsInNetwork.get(this.filesInNetwork.indexOf(nextFile)).size() == totalNumberOfParts) {
                     fileAssembled = true;
                     assembleFile(nextFile, totalNumberOfParts);
                     this.seederOfFiles = seederOfFilesInNetwork();
+                    this.isSeeder = true;
                     sendTrackerInformationAsSeeder(this.tokenID);
                 } else { // if the file is not assembled, update details results and then ask again
                     detailsResult = details(nextFile);
@@ -772,6 +760,11 @@ public class Peer {
                     peersOwningFileSeederBit = (ArrayList<Boolean>) detailsResult.get(3);
                     totalNumberOfParts = (int) detailsResult.get(4);
 
+                }
+
+                if (Arrays.stream(peerOwningFileNoUsefulPartition).sum() == peerOwningFileNoUsefulPartition.length) {
+                    System.out.println("Asked all peers for file " + nextFile + " and no one has the partitions we need :(");
+                    break;
                 }
             }
         }
@@ -785,17 +778,15 @@ public class Peer {
     private void logout(int token) {
         int response;
         try {
-            ObjectInputStream in;
-            try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                //Send register code
-                out.writeInt(Function.LOGOUT.getEncoded());
-                //Send tokenID
-                out.writeInt(token);
-                out.flush();
-                // wait for input
-                in = new ObjectInputStream(socket.getInputStream());
-            }
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            //Send register code
+            out.writeInt(Function.LOGOUT.getEncoded());
+            //Send tokenID
+            out.writeInt(token);
+            out.flush();
+            // wait for input
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
             response = in.readInt();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -982,10 +973,8 @@ public class Peer {
      */
     private void sendTrackerInformation(int token) {
         try {
-            ObjectOutputStream out;
-            try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                out = new ObjectOutputStream(socket.getOutputStream());
-            }
+            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             //Send register code
             out.writeInt(Function.PEER_INFORM.getEncoded());
             out.flush();
@@ -1019,10 +1008,8 @@ public class Peer {
         if (!this.isSeeder) return;
         try {
             for (String file : seederOfFiles) {
-                ObjectOutputStream out;
-                try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
-                    out = new ObjectOutputStream(socket.getOutputStream());
-                }
+                Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 //Send register code
                 out.writeInt(Function.SEEDER_INFORM.getEncoded());
                 out.flush();
@@ -1048,19 +1035,19 @@ public class Peer {
      * Enhances security.
      */
     private String hashString(String input) throws NoSuchAlgorithmException{
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes());
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(input.getBytes());
 
-            // Convert byte array to a hexadecimal string
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
+        // Convert byte array to a hexadecimal string
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
             }
-            return hexString.toString();
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 
     /**
@@ -1249,10 +1236,10 @@ public class Peer {
                 String partFileName = "%s%s%s-%s.%s".formatted(this.shared_directory, File.separator, fileNameExtension[0], String.valueOf(partNumber), fileNameExtension[1]);
                 File partFile = new File(partFileName);
 
-                if (!partFile.exists()) {
+                /*if (!partFile.exists()) {
                     System.out.println("Not all parts are downloaded.");
                     return;
-                }
+                }*/
 
                 try (BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(partFile))) {
                     byte[] buffer = new byte[Config.SPLIT_ASSEMBLE_SIZE];
@@ -1338,10 +1325,10 @@ public class Peer {
         String selectedFile = "";
         ArrayList<String> nonMatchingFiles = getNonMatchingFiles();
 //        Pick a random of those
-            if (!nonMatchingFiles.isEmpty()) {
-                Random random = new Random();
-                selectedFile = nonMatchingFiles.get(random.nextInt(nonMatchingFiles.size()));
-            }
+        if (!nonMatchingFiles.isEmpty()) {
+            Random random = new Random();
+            selectedFile = nonMatchingFiles.get(random.nextInt(nonMatchingFiles.size()));
+        }
         return selectedFile;
     }
 
