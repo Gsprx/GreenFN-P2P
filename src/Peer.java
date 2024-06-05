@@ -636,7 +636,7 @@ public class Peer {
                 // if the peers owning parts of this file are more than 4, then select 4 random (at most 2 seeders)
                 if (peersOwningFile.size() > 4) {
                     int requestToSeederCounter = 0; // we want at most 2 seeders
-                    while (peersToRequestTo.size() < 5) {
+                    while (peersToRequestTo.size() < 4) {
                         int randIndex = new Random().nextInt(peersOwningFile.size());
                         // if we've already selected this peer or its ourselves then skip
                         if (peersToRequestTo.contains(peersOwningFile.get(randIndex)) || peersOwningFile.get(randIndex)[2].equals(myInfo[2])) continue;
