@@ -85,6 +85,12 @@ public enum Function {
         public int getEncoded() {
             return 14;
         }
+    },
+    SEND_OTHER_PEER_INFO {
+        @Override
+        public int getEncoded() {
+            return 15;
+        }
     };
 
     public abstract int getEncoded();

@@ -85,6 +85,9 @@ public class TrackerThread extends Thread{
                 case 14:
                     sendPeerInfo();
                     break;
+                case 15:
+                    sendOtherPeerInfo();
+                    break;
 
             }//switch
         }//try
@@ -210,7 +213,7 @@ public class TrackerThread extends Thread{
 
     //code = 2
     //expected input is String username, String password
-    private void loginUser(){
+    private void loginUser() {
         try{
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             String username = (String) in.readObject();
@@ -526,9 +529,9 @@ public class TrackerThread extends Thread{
     private void replyUserStatistics() {
         try {
             //identify requester
-            String[] peer = (String[]) in.readObject();
+            String peer = (String) in.readObject();
             // get user statistics
-            int[] stats = userCountStatistics.get(peer[2]);
+            int[] stats = userCountStatistics.get(peer);
 
             ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
             out.writeObject(stats);
@@ -594,6 +597,30 @@ public class TrackerThread extends Thread{
             out.flush();
 
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // code 15
+    // send other peer information
+    private void sendOtherPeerInfo() {
+        try {
+            String username = (String) in.readObject();
+
+            String[] peerInfo = null;
+
+            for (String[] peer : this.activeUsers.values()) {
+                if (peer[2].equals(username)) {
+                    peerInfo = peer;
+                    break;
+                }
+            }
+
+            ObjectOutputStream out = new ObjectOutputStream(this.connection.getOutputStream());
+            out.writeObject(peerInfo);
+            out.flush();
+
+        } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }

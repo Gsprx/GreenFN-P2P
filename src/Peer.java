@@ -209,7 +209,7 @@ public class Peer {
                         Socket inConnection = server.accept();
                         Thread t = new PeerServerThread(inConnection, this.filesInNetwork, this.partitionsInNetwork,
                                 this.seederOfFiles, this.shared_directory, this.threadByFile,
-                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer, this.peerUsernamesByConnection, this.tokenID);
+                                this.peerPartitionsByThread, this.lock, this.partitionsByPeer, this.peerUsernamesByConnection, this.tokenID, this.isSeeder);
                         t.start();
                     }
                 } catch (IOException e) {
@@ -694,11 +694,11 @@ public class Peer {
                             ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
                             int result = in.readInt();
                             if (result == 0) {
-                                System.out.println(peer[2] + " denied request.");
+                                System.out.println("[" + Thread.currentThread().getName() + "] " + peer[2] + " denied request.");
                             } else if (result == -1) {
                                 // if the peer responds saying he doesn't own any useful files for us, then mark him as
                                 // useless
-                                System.out.println(peer[2] + " (" + Thread.currentThread().getName() + ") doesn't have any useful partitions for file " + nextFile);
+                                System.out.println("[" + Thread.currentThread().getName() + "] " + peer[2] + " doesn't have any useful partitions for file " + nextFile);
                                 int indexOfPeerOwningFile = -1;
                                 for (int p = 0; p < finalPeersOwningFile.size(); p++) {
                                     if (finalPeersOwningFile.get(p)[2].equals(peer[2])) {
@@ -713,11 +713,12 @@ public class Peer {
                                 // download file
                                 downloadFile2(nameOfPartition, in);
                                 //Test
-                                out.writeObject(Thread.currentThread().getName());
-                                out.flush();
+                                /*out.writeObject(Thread.currentThread().getName());
+                                out.flush();*/
                                 //Test-end
                                 // notify tracker
                                 notifyTracker(1, peer, nameOfPartition);
+                                System.out.println("[" + Thread.currentThread().getName() + "] " + "Successfully downloaded and notified tracker for file " + nameOfPartition + " from peer " + peer[2]);
                                 // update structs
                                 this.filesInNetwork = peersFilesInNetwork();
                                 this.partitionsInNetwork = peersPartitionsInNetwork();
@@ -748,8 +749,6 @@ public class Peer {
                     }
                 }
 
-                // TODO: if everyone rejects we call details from tracker after 500ms (from the last denial)
-                // TODO: if from the parts the available peers own we are not missing any, then bye bye, break
                 if (Arrays.stream(peerOwningFileNoUsefulPartition).sum() == peerOwningFileNoUsefulPartition.length) {
                     System.out.println("Asked all peers for file " + nextFile + " and no one has the partitions we need :(");
                     break;
@@ -853,7 +852,7 @@ public class Peer {
         }
     }
 
-    private void downloadFile2(String fileName, ObjectInputStream in) {
+    /*private void downloadFile2(String fileName, ObjectInputStream in) {
         try {
             String pathToStore = this.shared_directory + File.separator + fileName;
             FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
@@ -884,12 +883,45 @@ public class Peer {
             bufferedOutputStream.close();
             fileOutputStream.close();
 
-            // Notify tracker for successful download
-            System.out.println("File " + fileName + " received successfully.");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }*/
+
+    private void downloadFile2(String fileName, ObjectInputStream in) {
+        try {
+            String pathToStore = this.shared_directory + File.separator + fileName;
+            // Open to write in the file, truncating it first
+            try (FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
+                 BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream)) {
+
+                // Read number of file parts to be received
+                int fileParts = in.readInt();
+                for (int i = 0; i < fileParts; i++) {
+                    // Read the size of the current part
+                    int partSize = in.readInt();
+                    byte[] fileBytes = new byte[partSize];
+
+                    // Read the actual bytes
+                    int bytesRead = 0;
+                    while (bytesRead < partSize) {
+                        int read = in.read(fileBytes, bytesRead, partSize - bytesRead);
+                        if (read == -1) {
+                            throw new IOException("Unexpected end of stream.");
+                        }
+                        bytesRead += read;
+                    }
+
+                    // Write the bytes to the file
+                    bufferedOutputStream.write(fileBytes, 0, bytesRead);
+                }
+                bufferedOutputStream.flush(); // Ensure all data is written
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
 
     /**
      * A formula for calculating the "goodness" of a peer.
@@ -1145,11 +1177,6 @@ public class Peer {
                     }
                 }
             }
-
-            /*// split the seeding files
-            for (String f : seedingFiles) {
-                splitFile(f, Config.SPLIT_ASSEMBLE_SIZE);
-            }*/
 
             return seedingFiles;
 
