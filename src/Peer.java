@@ -539,16 +539,18 @@ public class Peer {
 
             // try to establish connection with peer
             try {
-                Socket downloadSocket = new Socket(currentPeer[0], Integer.parseInt(currentPeer[1]));
-                ObjectOutputStream out = new ObjectOutputStream(downloadSocket.getOutputStream());
+                ObjectInputStream in;
+                try (Socket downloadSocket = new Socket(currentPeer[0], Integer.parseInt(currentPeer[1]))) {
+                    ObjectOutputStream out = new ObjectOutputStream(downloadSocket.getOutputStream());
 
-                // code for simple download: 8
-                out.writeInt(Function.SIMPLE_DOWNLOAD.getEncoded());
-                out.writeObject(fileName);
-                out.flush();
+                    // code for simple download: 8
+                    out.writeInt(Function.SIMPLE_DOWNLOAD.getEncoded());
+                    out.writeObject(fileName);
+                    out.flush();
 
-                // wait for response
-                ObjectInputStream in = new ObjectInputStream(downloadSocket.getInputStream());
+                    // wait for response
+                    in = new ObjectInputStream(downloadSocket.getInputStream());
+                }
                 int result = (int) in.readObject();
                 // result 0 = file does not exist
                 if (result == 0) {
@@ -677,21 +679,23 @@ public class Peer {
                         try {
                             //System.out.println(Thread.currentThread().getName() + " I: " + finalI);
                             String[] peer = peersToRequestTo.get(finalI);
-                            Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]));
-                            ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
-                            // write collaborative function code
-                            out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
-                            // write file name
-                            out.writeObject(nextFile);
-                            // option for collaborative download
-                            out.writeInt(0);
-                            // write the peer requesting the file
-                            out.writeObject(myInfo[2]);
-                            // write the partitions of this file this peer owns
-                            out.writeObject(partitionsOfFileOwned);
-                            out.flush();
+                            ObjectInputStream in;
+                            try (Socket connection = new Socket(peer[0], Integer.parseInt(peer[1]))) {
+                                ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
+                                // write collaborative function code
+                                out.writeInt(Function.COLLABORATIVE_DOWNLOAD_HANDLER.getEncoded());
+                                // write file name
+                                out.writeObject(nextFile);
+                                // option for collaborative download
+                                out.writeInt(0);
+                                // write the peer requesting the file
+                                out.writeObject(myInfo[2]);
+                                // write the partitions of this file this peer owns
+                                out.writeObject(partitionsOfFileOwned);
+                                out.flush();
 
-                            ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
+                                in = new ObjectInputStream(connection.getInputStream());
+                            }
                             int result = in.readInt();
                             if (result == 0) {
                                 System.out.println("[" + Thread.currentThread().getName() + "] " + peer[2] + " denied request.");
@@ -781,15 +785,17 @@ public class Peer {
     private void logout(int token) {
         int response;
         try {
-            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            //Send register code
-            out.writeInt(Function.LOGOUT.getEncoded());
-            //Send tokenID
-            out.writeInt(token);
-            out.flush();
-            // wait for input
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in;
+            try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                //Send register code
+                out.writeInt(Function.LOGOUT.getEncoded());
+                //Send tokenID
+                out.writeInt(token);
+                out.flush();
+                // wait for input
+                in = new ObjectInputStream(socket.getInputStream());
+            }
             response = in.readInt();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -976,8 +982,10 @@ public class Peer {
      */
     private void sendTrackerInformation(int token) {
         try {
-            Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectOutputStream out;
+            try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
+                out = new ObjectOutputStream(socket.getOutputStream());
+            }
             //Send register code
             out.writeInt(Function.PEER_INFORM.getEncoded());
             out.flush();
@@ -1011,8 +1019,10 @@ public class Peer {
         if (!this.isSeeder) return;
         try {
             for (String file : seederOfFiles) {
-                Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT);
-                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                ObjectOutputStream out;
+                try (Socket socket = new Socket(Config.TRACKER_IP, Config.TRACKER_PORT)) {
+                    out = new ObjectOutputStream(socket.getOutputStream());
+                }
                 //Send register code
                 out.writeInt(Function.SEEDER_INFORM.getEncoded());
                 out.flush();
