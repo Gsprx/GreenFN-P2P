@@ -5,6 +5,7 @@ import misc.TypeChecking;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Time;
 import java.util.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -711,7 +712,7 @@ public class Peer {
                             } else {
                                 String nameOfPartition = (String) in.readObject();
                                 // download file
-                                downloadFile2(nameOfPartition, in);
+                                downloadFile(nameOfPartition, in);
                                 // notify tracker
                                 notifyTracker(1, peer, nameOfPartition);
                                 System.out.println("[" + Thread.currentThread().getName() + "] " + "Successfully downloaded and notified tracker for file " + nameOfPartition + " from peer " + peer[2]);
@@ -739,7 +740,7 @@ public class Peer {
                 // wait for all the threads to finish before moving on
                 while (Arrays.stream(threadsFinished).sum() < threadsFinished.length) {
                     try {
-                        TimeUnit.MILLISECONDS.sleep(100);
+                        TimeUnit.MILLISECONDS.sleep(500);
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
@@ -814,78 +815,6 @@ public class Peer {
      * @param in The input stream from which we will read the bytes.
      */
     private void downloadFile(String fileName, ObjectInputStream in) {
-        try {
-            String pathToStore = this.shared_directory + File.separator + fileName;
-            FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
-            // Delete existing data from the file
-            fileOutputStream.getChannel().truncate(0);
-            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
-            //Open to write in the file
-            fileOutputStream = new FileOutputStream(pathToStore, true);
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
-            //read file parts to be received
-            int fileParts = in.readInt();
-            byte[] fileBytes;
-            for (int i=0; i<fileParts; i++){
-                fileBytes = new byte[Config.DOWNLOAD_SIZE];
-                int bytesRead;
-                System.out.println("Downloading FILE!!!");
-                int counter = 0;
-                while ((bytesRead = in.read(fileBytes)) != -1) {
-                    System.out.println(counter);
-                    counter += bytesRead;
-                    //System.out.println("fileBytes.getClass() "+fileBytes.getClass());
-                    bufferedOutputStream.write(fileBytes, 0, bytesRead);
-                }
-                bufferedOutputStream.flush();
-            }
-            bufferedOutputStream.close();
-            fileOutputStream.close();
-
-            // notify tracker for successful download
-            System.out.println("File " + fileName + " received successfully.");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /*private void downloadFile2(String fileName, ObjectInputStream in) {
-        try {
-            String pathToStore = this.shared_directory + File.separator + fileName;
-            FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
-            fileOutputStream.getChannel().truncate(0);
-            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
-
-            // Open to write in the file
-            fileOutputStream = new FileOutputStream(pathToStore, true);
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
-
-            // Read file parts to be received
-            int fileParts = in.readInt();
-            for (int i = 0; i < fileParts; i++) {
-                // Read the size of the current part
-                int partSize = in.readInt();
-                byte[] fileBytes = new byte[partSize];
-
-                // Read the actual bytes
-                int bytesRead = in.read(fileBytes, 0, partSize);
-                if (bytesRead != partSize) {
-                    throw new IOException("Unexpected number of bytes read.");
-                }
-
-                // Write the bytes to the file
-                bufferedOutputStream.write(fileBytes, 0, bytesRead);
-                bufferedOutputStream.flush();
-            }
-            bufferedOutputStream.close();
-            fileOutputStream.close();
-
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }*/
-
-    private void downloadFile2(String fileName, ObjectInputStream in) {
         try {
             String pathToStore = this.shared_directory + File.separator + fileName;
             // Open to write in the file, truncating it first
@@ -1383,41 +1312,6 @@ public class Peer {
             trackerConnectForPeerInfo.close();
             return peerInfo;
         } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * Option | Send file to peer.
-     */
-    private void sendFile(ObjectOutputStream out, String filename) {
-        //initiate basic stream details
-        String fileToSendName = this.shared_directory +File.separator+filename;
-        File fileToSend = new File(fileToSendName);
-        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / Config.DOWNLOAD_SIZE);
-
-        //use try-with-resources block to automatically close streams
-        try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
-             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
-
-            //send number of parts to be sent in total
-            out.writeInt(numberOfPartsToSend);
-            out.flush();
-
-            //create byte array of the file partition
-            byte[] fileBytes = new byte[Config.DOWNLOAD_SIZE];
-
-
-            //this loop will keep on reading partitions of partSize and send them to the receiver peer
-            //until the byte stream has nothing more to read.
-            //read method returns -1 when there are no more bytes to be read
-            int i;
-            while ((i = bufferedInputStream.read(fileBytes)) != -1) {
-                //the read bytes are placed into the byte array fileBytes and sent to the receiver peer
-                out.write(fileBytes, 0, i);
-                out.flush();
-            }
-        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }

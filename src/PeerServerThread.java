@@ -3,12 +3,9 @@ import misc.Function;
 
 import java.io.*;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.SQLOutput;
-import java.sql.Time;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -140,68 +137,8 @@ public class PeerServerThread extends Thread {
     /**
      * Option | Send file to peer.
      */
+
     private void sendFile(ObjectOutputStream out, String filename) {
-        //initiate basic stream details
-        String fileToSendName = this.shared_directory +File.separator+filename;
-        File fileToSend = new File(fileToSendName);
-        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / Config.DOWNLOAD_SIZE);
-
-        //use try-with-resources block to automatically close streams
-        try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
-             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
-
-            //send number of parts to be sent in total
-            out.writeInt(numberOfPartsToSend);
-            out.flush();
-
-            //create byte array of the file partition
-            byte[] fileBytes = new byte[Config.DOWNLOAD_SIZE];
-
-
-            //this loop will keep on reading partitions of partSize and send them to the receiver peer
-            //until the byte stream has nothing more to read.
-            //read method returns -1 when there are no more bytes to be read
-            int i;
-            while ((i = bufferedInputStream.read(fileBytes)) != -1) {
-                //the read bytes are placed into the byte array fileBytes and sent to the receiver peer
-                out.write(fileBytes, 0, i);
-                out.flush();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /*private void sendFile2(ObjectOutputStream out, String filename) {
-        String fileToSendName = this.shared_directory + File.separator + filename;
-        File fileToSend = new File(fileToSendName);
-        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / 1024);
-
-        try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
-             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
-
-            // Send number of parts to be sent in total
-            out.writeInt(numberOfPartsToSend);
-            out.flush();
-
-            // Create byte array of the file partition
-            byte[] fileBytes = new byte[1024];
-
-            int i;
-            while ((i = bufferedInputStream.read(fileBytes)) != -1) {
-                // Send the size of the current part
-                out.writeInt(i);
-                out.flush();
-                // Send the actual bytes
-                out.write(fileBytes, 0, i);
-                out.flush();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }*/
-
-    private void sendFile2(ObjectOutputStream out, String filename) {
         String fileToSendName = this.shared_directory + File.separator + filename;
         File fileToSend = new File(fileToSendName);
         long fileSize = fileToSend.length();
@@ -304,9 +241,9 @@ public class PeerServerThread extends Thread {
                     outputStream.writeObject(selectedPart);
                     outputStream.flush();
                     // send the file
-                    sendFile2(outputStream, selectedPart);
+                    sendFile(outputStream, selectedPart);
                     try {
-                        TimeUnit.MILLISECONDS.sleep(500);
+                        TimeUnit.MILLISECONDS.sleep(200);
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
@@ -420,9 +357,9 @@ public class PeerServerThread extends Thread {
                                 outputStream.writeObject(selectedPart);
                                 outputStream.flush();
                                 //Send the selected part
-                                sendFile2(outputStream, selectedPart);
+                                sendFile(outputStream, selectedPart);
                                 try {
-                                    TimeUnit.MILLISECONDS.sleep(500);
+                                    TimeUnit.MILLISECONDS.sleep(200);
                                 } catch (InterruptedException e) {
                                     throw new RuntimeException(e);
                                 }
@@ -433,7 +370,6 @@ public class PeerServerThread extends Thread {
                         int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
                         int randomIndex = new Random().nextInt(10);
                         int decision = chanceBucket[randomIndex];
-                        decision = 0;
 
                         switch (decision) {
                             case 0:
@@ -453,7 +389,6 @@ public class PeerServerThread extends Thread {
                     this.threadByFile.remove(fileName);
                     this.peerPartitionsByThread.remove(threadName);
 
-                    /*
                     if (selectedPeer != null) {
                         String selectedPeerUsername = this.peerUsernamesByConnection.remove(selectedPeer);
                         HashSet<String> existingPartitions = this.partitionsInNetwork.get(this.filesInNetwork.indexOf(fileName));
@@ -474,7 +409,7 @@ public class PeerServerThread extends Thread {
                         tracker_out2.writeInt(this.tokenID);
                         tracker_out2.writeObject(fileName);
                         tracker_out2.flush();
-                        ObjectInputStream tracker_in2 = new ObjectInputStream(askTrackerPeerInfo.getInputStream());
+                        ObjectInputStream tracker_in2 = new ObjectInputStream(askTrackerFileInfo.getInputStream());
                         tracker_in2.readInt();
                         tracker_in2.readObject();
                         tracker_in2.readObject();
@@ -506,7 +441,7 @@ public class PeerServerThread extends Thread {
                         } else {
                             String nameOfPartition = (String) inputStream.readObject();
                             // download file
-                            downloadFile2(nameOfPartition, inputStream);
+                            downloadFile(nameOfPartition, inputStream);
                             notifyTracker(1, selectedPeerInfo, nameOfPartition);
                             System.out.println("[" + Thread.currentThread().getName() + "] " + "Successfully downloaded and notified tracker for file " + nameOfPartition + " from peer " + selectedPeerUsername);
                             this.filesInNetwork = peersFilesInNetwork();
@@ -532,8 +467,6 @@ public class PeerServerThread extends Thread {
                         }
 
                     }
-
-                     */
                 }
 
             } else {
@@ -567,7 +500,7 @@ public class PeerServerThread extends Thread {
                     throw new RuntimeException(e);
                 }
             }
-        } catch (InterruptedException | IOException e) {
+        } catch (InterruptedException | IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
@@ -635,7 +568,7 @@ public class PeerServerThread extends Thread {
             out.writeInt(1);
             out.writeObject(selectedPartitionSend);
             out.flush();
-            sendFile2(out, selectedPartitionSend);
+            sendFile(out, selectedPartitionSend);
             TimeUnit.MILLISECONDS.sleep(200);
             System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " sent a file (" + selectedPartitionSend + ")" + " to randomly selected peer: " + peerUsername);
 
@@ -743,7 +676,7 @@ public class PeerServerThread extends Thread {
             out.writeInt(1);
             out.writeObject(selectedPartitionSend);
             out.flush();
-            sendFile2(out, selectedPartitionSend);
+            sendFile(out, selectedPartitionSend);
             TimeUnit.MILLISECONDS.sleep(200);
             System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " sent a file (" + selectedPartitionSend + ")" + " to best peer: " + peerUsername);
 
@@ -877,7 +810,7 @@ public class PeerServerThread extends Thread {
             outputStream.writeInt(1);
             outputStream.writeObject(selectedPartitionSend);
             outputStream.flush();
-            sendFile2(outputStream, selectedPartitionSend);
+            sendFile(outputStream, selectedPartitionSend);
             TimeUnit.MILLISECONDS.sleep(200);
             System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " sent a file (" + selectedPartitionSend + ")" + " to max peer: " + peerUsername);
 
@@ -911,7 +844,7 @@ public class PeerServerThread extends Thread {
                 out.writeInt(1);
                 out.writeObject(partNameToSend);
                 out.flush();
-                sendFile2(out, partNameToSend);
+                sendFile(out, partNameToSend);
                 TimeUnit.MILLISECONDS.sleep(200);
             }
         } catch (IOException | InterruptedException e) {
@@ -937,7 +870,7 @@ public class PeerServerThread extends Thread {
     // ================================================================================================================
 
 
-    private void downloadFile2(String fileName, ObjectInputStream in) {
+    private void downloadFile(String fileName, ObjectInputStream in) {
         try {
             String pathToStore = this.shared_directory + File.separator + fileName;
             // Open to write in the file, truncating it first
