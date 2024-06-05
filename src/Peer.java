@@ -849,6 +849,44 @@ public class Peer {
         }
     }
 
+    private void downloadFile2(String fileName, ObjectInputStream in) {
+        try {
+            String pathToStore = this.shared_directory + File.separator + fileName;
+            FileOutputStream fileOutputStream = new FileOutputStream(pathToStore);
+            fileOutputStream.getChannel().truncate(0);
+            fileOutputStream.close(); // Close the file stream to ensure truncation takes effect
+
+            // Open to write in the file
+            fileOutputStream = new FileOutputStream(pathToStore, true);
+            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(fileOutputStream);
+
+            // Read file parts to be received
+            int fileParts = in.readInt();
+            for (int i = 0; i < fileParts; i++) {
+                // Read the size of the current part
+                int partSize = in.readInt();
+                byte[] fileBytes = new byte[partSize];
+
+                // Read the actual bytes
+                int bytesRead = in.read(fileBytes, 0, partSize);
+                if (bytesRead != partSize) {
+                    throw new IOException("Unexpected number of bytes read.");
+                }
+
+                // Write the bytes to the file
+                bufferedOutputStream.write(fileBytes, 0, bytesRead);
+                bufferedOutputStream.flush();
+            }
+            bufferedOutputStream.close();
+            fileOutputStream.close();
+
+            // Notify tracker for successful download
+            System.out.println("File " + fileName + " received successfully.");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * A formula for calculating the "goodness" of a peer.
      * @param countDownloads How many total successful downloads he has offered.

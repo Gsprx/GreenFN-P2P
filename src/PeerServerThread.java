@@ -165,6 +165,35 @@ public class PeerServerThread extends Thread {
             throw new RuntimeException(e);
         }
     }
+    private void sendFile2(ObjectOutputStream out, String filename) {
+        String fileToSendName = this.shared_directory + File.separator + filename;
+        File fileToSend = new File(fileToSendName);
+        int numberOfPartsToSend = (int) Math.ceil((double) fileToSend.length() / 1024);
+
+        try (FileInputStream fileInputStream = new FileInputStream(fileToSend);
+             BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
+
+            // Send number of parts to be sent in total
+            out.writeInt(numberOfPartsToSend);
+            out.flush();
+
+            // Create byte array of the file partition
+            byte[] fileBytes = new byte[1024];
+
+            int i;
+            while ((i = bufferedInputStream.read(fileBytes)) != -1) {
+                // Send the size of the current part
+                out.writeInt(i);
+                out.flush();
+
+                // Send the actual bytes
+                out.write(fileBytes, 0, i);
+                out.flush();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
     /**
      * Respond to the client's ping
      */
