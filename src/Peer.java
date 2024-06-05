@@ -711,7 +711,11 @@ public class Peer {
                             } else {
                                 String nameOfPartition = (String) in.readObject();
                                 // download file
-                                downloadFile(nameOfPartition, in);
+                                downloadFile2(nameOfPartition, in);
+                                //Test
+                                out.writeObject(Thread.currentThread().getName());
+                                out.flush();
+                                //Test-end
                                 // notify tracker
                                 notifyTracker(1, peer, nameOfPartition);
                                 // update structs

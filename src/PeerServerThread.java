@@ -267,12 +267,16 @@ public class PeerServerThread extends Thread {
                     outputStream.writeObject(selectedPart);
                     outputStream.flush();
                     // send the file
-                    sendFile(outputStream, selectedPart);
-                    try {
-                        TimeUnit.MILLISECONDS.sleep(500);
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
+                    sendFile2(outputStream, selectedPart);
+                    //Test
+                    String r = (String) in.readObject();
+                    System.out.println("1) confirmation: "+r);
+                    //Test-end
+//                    try {
+//                        TimeUnit.MILLISECONDS.sleep(500);
+//                    } catch (InterruptedException e) {
+//                        throw new RuntimeException(e);
+//                    }
                     //Send "DENIED" to the rest
                     involvedPeers.remove(selectedPeer);
                     this.peerUsernamesByConnection.remove(selectedPeer);
@@ -288,24 +292,26 @@ public class PeerServerThread extends Thread {
                     // if the initial thread above got removed (because we waited 200ms and moved on in the if statement above),
                     // then ignore this request
                     if (!this.threadByFile.containsKey(fileName)) {
-                        lock.unlock();
-                        return;
-                    }
-                    String initThread = this.threadByFile.get(fileName);
+                        //inform him that we did not pick him
+                        ObjectOutputStream outputStream = new ObjectOutputStream(this.connection.getOutputStream());
+                        outputStream.writeInt(0);
+                        outputStream.flush();
+                    }else{
+                        String initThread = this.threadByFile.get(fileName);
 
-                    HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
-                    existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
-                    this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
-                    for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
-                        int i=1;
-                        for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
-                            System.out.println(i + ". Socket: " + entry2.getKey() + " | Parts: " + entry2.getValue());
-                            i++;
+                        HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+                        existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
+                        this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
+                        for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
+                            int i=1;
+                            for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
+                                System.out.println(i + ". Socket: " + entry2.getKey() + " | Parts: " + entry2.getValue());
+                                i++;
+                            }
                         }
                     }
-
-                    lock.unlock();
                 }
+                lock.unlock();
                 try {
                     TimeUnit.MILLISECONDS.sleep(500);
                 } catch (InterruptedException e) {
@@ -313,6 +319,8 @@ public class PeerServerThread extends Thread {
                 }
             }
         } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
@@ -376,12 +384,16 @@ public class PeerServerThread extends Thread {
                                 outputStream.writeObject(selectedPart);
                                 outputStream.flush();
                                 //Send the selected part
-                                sendFile(outputStream, selectedPart);
-                                try {
-                                    TimeUnit.MILLISECONDS.sleep(500);
-                                } catch (InterruptedException e) {
-                                    throw new RuntimeException(e);
-                                }
+                                sendFile2(outputStream, selectedPart);
+                                //Test
+                                String r = (String) in.readObject();
+                                System.out.println("2) confirmation: "+r);
+                                //Test-end
+//                                try {
+//                                    TimeUnit.MILLISECONDS.sleep(500);
+//                                } catch (InterruptedException e) {
+//                                    throw new RuntimeException(e);
+//                                }
                                 //TODO: ASK TO SEND BACK FILE
                             }
                         }
@@ -390,7 +402,7 @@ public class PeerServerThread extends Thread {
                         int[] chanceBucket = {0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
                         int randomIndex = new Random().nextInt(10);
                         int decision = chanceBucket[randomIndex];
-                        decision = 0;
+                        decision = 1;
 
                         switch (decision) {
                             case 0:
@@ -416,25 +428,26 @@ public class PeerServerThread extends Thread {
                     // if the initial thread above got removed (because we waited 200ms and moved on in the if statement above),
                     // then ignore this request
                     if (!this.threadByFile.containsKey(fileName)) {
-                        lock.unlock();
-                        return;
-                    }
-                    String initThread = this.threadByFile.get(fileName);
+                        //inform him that we did not pick him
+                        ObjectOutputStream outputStream = new ObjectOutputStream(this.connection.getOutputStream());
+                        outputStream.writeInt(0);
+                        outputStream.flush();
+                    }else{
+                        String initThread = this.threadByFile.get(fileName);
 
-                    HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
-                    existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
-                    this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
-                    for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
-                        int i=1;
-                        for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
-                            System.out.println(i + ". Peer: " + this.peerUsernamesByConnection.get(entry2.getKey()) + " | Parts: " + entry2.getValue());
-                            i++;
+                        HashMap<Socket, ArrayList<String>> existingPeerPartitionsReq = this.peerPartitionsByThread.get(initThread);
+                        existingPeerPartitionsReq.put(this.connection, partitionsReqByPeer.get(peerName));
+                        this.peerPartitionsByThread.put(initThread, existingPeerPartitionsReq);
+                        for (Map.Entry<String, HashMap<Socket, ArrayList<String>>> entry : this.peerPartitionsByThread.entrySet()) {
+                            int i=1;
+                            for (Map.Entry<Socket, ArrayList<String>> entry2 : entry.getValue().entrySet()) {
+                                System.out.println(i + ". Peer: " + this.peerUsernamesByConnection.get(entry2.getKey()) + " | Parts: " + entry2.getValue());
+                                i++;
+                            }
                         }
                     }
-
-                    lock.unlock();
-
                 }
+                lock.unlock();
                 try {
                     TimeUnit.MILLISECONDS.sleep(500);
                 } catch (InterruptedException e) {
@@ -442,6 +455,8 @@ public class PeerServerThread extends Thread {
                 }
             }
         } catch (InterruptedException | IOException e) {
+            throw new RuntimeException(e);
+        } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
@@ -473,16 +488,22 @@ public class PeerServerThread extends Thread {
                 out.writeObject(selectedPart);
                 out.flush();
                 //Send the selected part
-                sendFile(out, selectedPart);
-                try {
-                    TimeUnit.MILLISECONDS.sleep(500);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+                sendFile2(out, selectedPart);
+                //Test
+                String r = (String) in.readObject();
+                System.out.println("3) confirmation: "+r);
+                //Test-end
+//                try {
+//                    TimeUnit.MILLISECONDS.sleep(500);
+//                } catch (InterruptedException e) {
+//                    throw new RuntimeException(e);
+//                }
                 //TODO: ASK TO SEND BACK FILE
             }
 
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
@@ -594,13 +615,19 @@ public class PeerServerThread extends Thread {
             out.writeObject(partToSend);
             out.flush();
             // send the part
-            sendFile(out, partToSend);
-            try {
-                TimeUnit.MILLISECONDS.sleep(200);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+            sendFile2(out, partToSend);
+            //Test
+            String r = (String) in.readObject();
+            System.out.println("4) confirmation: "+r);
+            //Test-end
+//            try {
+//                TimeUnit.MILLISECONDS.sleep(200);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException(e);
+//            }
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
@@ -758,7 +785,11 @@ public class PeerServerThread extends Thread {
                 ObjectOutputStream outputStream = new ObjectOutputStream(maxPeer.getOutputStream());
                 outputStream.writeObject(selectedPartitionSend);
                 out.flush();
-                sendFile(new ObjectOutputStream(outputStream), selectedPartitionSend);
+                sendFile2(new ObjectOutputStream(outputStream), selectedPartitionSend);
+                //Test
+                String r = (String) in.readObject();
+                System.out.println("5) confirmation: "+r);
+                //Test-end
                 System.out.println("[CollaborativeDownload] Token ID: " + tokenID + " sent a file (" + selectedPartitionSend + ")" + " to max peer: " + peerUsernamesByConnection.get(maxPeer));
 
 
@@ -802,9 +833,15 @@ public class PeerServerThread extends Thread {
             String partNameToSend = candidatePartsToSend.get(new Random().nextInt(candidatePartsToSend.size()));
             out.writeObject(partNameToSend);
             out.flush();
-            sendFile(out, partNameToSend);
+            sendFile2(out, partNameToSend);
+            //Test
+            String r = (String) in.readObject();
+            System.out.println("6) confirmation: "+r);
+            //Test-end
             // TODO: send the contents of this part - TEST IT
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
